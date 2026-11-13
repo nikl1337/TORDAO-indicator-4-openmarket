@@ -6,6 +6,7 @@ input("close", ohlcv.close); // primary input: the chart's own candles define th
 input("profile", volume_profile.cells, { max_cells: 8192, missing: "empty", description: "This bar's volume by price level (follows the chart timeframe)" });
 
 // ---- Toggles
+page("Display");
 param.bool("show_zones", true, { label: "Show auction zones" });
 param.bool("show_tl", true, { label: "Show trendlines + break/retest marks" });
 param.bool("show_poc", true, { label: "Show point of control (chart timeframe)" });
@@ -20,7 +21,8 @@ param.bool("show_e4", true, { label: "Show EMA 4 (360)" });
 param.bool("show_e5", true, { label: "Show EMA 5 (667)" });
 param.bool("show_e6", true, { label: "Show EMA 6 (800)" });
 
-// ---- Settings
+// ---- Core settings
+page("Logic");
 param("swing_len", 5, { min: 2, max: 30, description: "Swing length (bars each side)" });
 param("zone_atr", 0.6, { min: 0.1, max: 3, description: "Zone depth in ATR" });
 param("near_atr", 1.5, { min: 0.3, max: 6, description: "Revisit-likely distance in ATR" });
@@ -33,7 +35,28 @@ param("fake_bars", 5, { min: 1, max: 30, description: "Close back inside within 
 param("poc_lookback", 24, { min: 2, max: 200, description: "Bars used for the developing POC level (heaviest bar POC)" });
 param("react_wick", 0.3, { min: 0, max: 0.9, description: "Min rejection wick as share of the bar range for a zone reaction" });
 param("conf_tol", 0.4, { min: 0.05, max: 3, description: "A level is in confluence when within this many ATR of the zone" });
-param("min_score", 35, { min: 1, max: 100, description: "Only mark reactions with a confluence score at or above this" });
+param("min_score", 35, { min: 1, max: 100, description: "Only mark reactions (zone glow, triangle, alert) with a score at or above this" });
+param("keep_score", 60, { min: 1, max: 100, description: "Number labels stay on screen only for scores at or above this" });
+param("keep_n", 4, { min: 1, max: 12, description: "How many of the latest buy and of the latest sell number labels stay on screen" });
+
+// ---- Confluence weights (the score is the sum of the weights of everything in confluence, capped at 100)
+page("Confluence weights");
+note("Defaults add up to 100 when everything lines up. Raise a weight to make that level count more.");
+param("w_base", 25, { min: 0, max: 100, description: "Weight: zone reaction itself" });
+param("w_poc", 10, { min: 0, max: 100, description: "Weight: POC inside the zone" });
+param("w_vd", 5, { min: 0, max: 100, description: "Weight: daily VWAP" });
+param("w_vw", 7, { min: 0, max: 100, description: "Weight: weekly VWAP" });
+param("w_vm", 8, { min: 0, max: 100, description: "Weight: monthly VWAP" });
+param("w_e1", 2, { min: 0, max: 100, description: "Weight: EMA 1" });
+param("w_e2", 3, { min: 0, max: 100, description: "Weight: EMA 2" });
+param("w_e3", 4, { min: 0, max: 100, description: "Weight: EMA 3" });
+param("w_e4", 5, { min: 0, max: 100, description: "Weight: EMA 4" });
+param("w_e5", 5, { min: 0, max: 100, description: "Weight: EMA 5" });
+param("w_e6", 6, { min: 0, max: 100, description: "Weight: EMA 6" });
+param("w_tl", 12, { min: 0, max: 100, description: "Weight: trendline at the zone" });
+param("w_tlb", 8, { min: 0, max: 100, description: "Weight: extra when that trendline just broke or was retested" });
+
+page("EMA lengths");
 param("ema1", 21, { min: 2, max: 2000, description: "EMA 1 length" });
 param("ema2", 50, { min: 2, max: 2000, description: "EMA 2 length" });
 param("ema3", 144, { min: 2, max: 2000, description: "EMA 3 length" });
@@ -92,10 +115,10 @@ alert("zone_lost", { when: gLost, message: "{{symbol}}: zone lost at {{close}}",
 alert("buy_reaction", { when: gBuy, message: "{{symbol}}: BUY reaction in demand zone at {{close}}", description: "Neon teal buy reaction" });
 alert("sell_reaction", { when: gSell, message: "{{symbol}}: SELL reaction in supply zone at {{close}}", description: "Neon pink sell reaction" });
 
-// Number labels for the confluence score
+// Number labels: a ring of up to 12 handles per side; keep_n of them are used, so the oldest is reused
 string("tag", { max_bytes: 16 });
 handles.label({ size: 12 });
-const MAX_TAGS = 24;
+const MAX_TAGS = 12;
 const TEAL: i32 = rgba(0, 255, 213, 255);
 const PINK: i32 = rgba(255, 43, 214, 255);
 function makeLabels(first: i32, count: i32): LabelHandle[] {
@@ -107,6 +130,8 @@ const buyTags = makeLabels(0, MAX_TAGS);
 const sellTags = makeLabels(MAX_TAGS, MAX_TAGS);
 let nBuy: i32 = 0;
 let nSell: i32 = 0;
+let keepN: i32 = 4;
+let keepScore: f64 = 60.0;
 
 // A level is in confluence when it sits inside the zone, widened by tol
 function inBand(level: f64, lo: f64, hi: f64, tol: f64): bool {
@@ -120,6 +145,11 @@ let pcur: i32 = 0;
 let pcount: i32 = 0;
 let pN: i32 = 24;
 let pocLvl: f64 = NaN;
+
+// weights, read in onStart()
+let wBase: f64 = 25.0; let wPoc: f64 = 10.0; let wVd: f64 = 5.0; let wVw: f64 = 7.0; let wVm: f64 = 8.0;
+let wE1: f64 = 2.0; let wE2: f64 = 3.0; let wE3: f64 = 4.0; let wE4: f64 = 5.0; let wE5: f64 = 5.0; let wE6: f64 = 6.0;
+let wTl: f64 = 12.0; let wTlb: f64 = 8.0;
 
 let sw = new Swings(5, 5);
 let vD = new Vwap("day", "hlc3");
@@ -152,6 +182,11 @@ function onStart(): void {
   right = i32(p_swing_len());
   sw = new Swings(right, right);
   pN = i32(p_poc_lookback());
+  keepN = i32(p_keep_n());
+  keepScore = p_keep_score();
+  wBase = p_w_base(); wPoc = p_w_poc(); wVd = p_w_vd(); wVw = p_w_vw(); wVm = p_w_vm();
+  wE1 = p_w_e1(); wE2 = p_w_e2(); wE3 = p_w_e3(); wE4 = p_w_e4(); wE5 = p_w_e5(); wE6 = p_w_e6();
+  wTl = p_w_tl(); wTlb = p_w_tlb();
   vD = new Vwap("day", "hlc3");
   vW = new Vwap("week", "hlc3");
   vM = new Vwap("month", "hlc3");
@@ -258,7 +293,6 @@ function onBar(): void {
   pocVolRing[pcur] = barPocVol;
   pcur = (pcur + 1) % MAXP;
   if (pcount < MAXP) pcount += 1;
-  // developing POC level: the POC of the heaviest bar inside the lookback window
   let best: f64 = -1.0;
   const span = pcount < pN ? pcount : pN;
   for (let k = 1; k <= span; k++) {
@@ -276,51 +310,53 @@ function onBar(): void {
   const buyReact = dL == 1.0 && dS < 4.0 && !isNaN(dT) && l <= dT && c > dB && c > o && range > 0.0 && lowWick / range >= wickMin;
   const sellReact = sL == 1.0 && sS < 4.0 && !isNaN(sB) && h >= sB && c < sT && c < o && range > 0.0 && upWick / range >= wickMin;
 
-  // ---- Confluence score 1-100: zone 25, POC 10, VWAP 20, EMA 25, trendline 20
+  // ---- Confluence score 1-100 from the adjustable weights
   const ct = p_conf_tol() * atr;
   let scoreBuy: f64 = 0.0;
   let scoreSell: f64 = 0.0;
   if (buyReact) {
-    let s = 25.0;
-    if (shPoc && (inBand(pocLvl, dB, dT, ct) || inBand(barPoc, dB, dT, ct))) s += 10.0;
-    if (shVd && inBand(vdv, dB, dT, ct)) s += 5.0;
-    if (shVw && inBand(vwv, dB, dT, ct)) s += 7.0;
-    if (shVm && inBand(vmv, dB, dT, ct)) s += 8.0;
-    if (shE1 && inBand(v1, dB, dT, ct)) s += 2.0;
-    if (shE2 && inBand(v2, dB, dT, ct)) s += 3.0;
-    if (shE3 && inBand(v3, dB, dT, ct)) s += 4.0;
-    if (shE4 && inBand(v4, dB, dT, ct)) s += 5.0;
-    if (shE5 && inBand(v5, dB, dT, ct)) s += 5.0;
-    if (shE6 && inBand(v6, dB, dT, ct)) s += 6.0;
-    if (shTl && uOn && inBand(uv, dB, dT, ct)) { s += 12.0; if (ru == 1.0 || bu == 1.0) s += 8.0; }
+    let s = wBase;
+    if (shPoc && (inBand(pocLvl, dB, dT, ct) || inBand(barPoc, dB, dT, ct))) s += wPoc;
+    if (shVd && inBand(vdv, dB, dT, ct)) s += wVd;
+    if (shVw && inBand(vwv, dB, dT, ct)) s += wVw;
+    if (shVm && inBand(vmv, dB, dT, ct)) s += wVm;
+    if (shE1 && inBand(v1, dB, dT, ct)) s += wE1;
+    if (shE2 && inBand(v2, dB, dT, ct)) s += wE2;
+    if (shE3 && inBand(v3, dB, dT, ct)) s += wE3;
+    if (shE4 && inBand(v4, dB, dT, ct)) s += wE4;
+    if (shE5 && inBand(v5, dB, dT, ct)) s += wE5;
+    if (shE6 && inBand(v6, dB, dT, ct)) s += wE6;
+    if (shTl && uOn && inBand(uv, dB, dT, ct)) { s += wTl; if (ru == 1.0 || bu == 1.0) s += wTlb; }
     scoreBuy = Math.max(1.0, Math.min(100.0, Math.round(s)));
   }
   if (sellReact) {
-    let s = 25.0;
-    if (shPoc && (inBand(pocLvl, sB, sT, ct) || inBand(barPoc, sB, sT, ct))) s += 10.0;
-    if (shVd && inBand(vdv, sB, sT, ct)) s += 5.0;
-    if (shVw && inBand(vwv, sB, sT, ct)) s += 7.0;
-    if (shVm && inBand(vmv, sB, sT, ct)) s += 8.0;
-    if (shE1 && inBand(v1, sB, sT, ct)) s += 2.0;
-    if (shE2 && inBand(v2, sB, sT, ct)) s += 3.0;
-    if (shE3 && inBand(v3, sB, sT, ct)) s += 4.0;
-    if (shE4 && inBand(v4, sB, sT, ct)) s += 5.0;
-    if (shE5 && inBand(v5, sB, sT, ct)) s += 5.0;
-    if (shE6 && inBand(v6, sB, sT, ct)) s += 6.0;
-    if (shTl && rOn && inBand(rv, sB, sT, ct)) { s += 12.0; if (rd == 1.0 || bd == 1.0) s += 8.0; }
+    let s = wBase;
+    if (shPoc && (inBand(pocLvl, sB, sT, ct) || inBand(barPoc, sB, sT, ct))) s += wPoc;
+    if (shVd && inBand(vdv, sB, sT, ct)) s += wVd;
+    if (shVw && inBand(vwv, sB, sT, ct)) s += wVw;
+    if (shVm && inBand(vmv, sB, sT, ct)) s += wVm;
+    if (shE1 && inBand(v1, sB, sT, ct)) s += wE1;
+    if (shE2 && inBand(v2, sB, sT, ct)) s += wE2;
+    if (shE3 && inBand(v3, sB, sT, ct)) s += wE3;
+    if (shE4 && inBand(v4, sB, sT, ct)) s += wE4;
+    if (shE5 && inBand(v5, sB, sT, ct)) s += wE5;
+    if (shE6 && inBand(v6, sB, sT, ct)) s += wE6;
+    if (shTl && rOn && inBand(rv, sB, sT, ct)) { s += wTl; if (rd == 1.0 || bd == 1.0) s += wTlb; }
     scoreSell = Math.max(1.0, Math.min(100.0, Math.round(s)));
   }
   const minS = p_min_score();
   const fireBuy = shSig && scoreBuy >= minS && scoreBuy > 0.0;
   const fireSell = shSig && scoreSell >= minS && scoreSell > 0.0;
-  if (fireBuy) {
-    const tag = buyTags[nBuy % MAX_TAGS];
+
+  // Number labels: only scores >= keep_score, and only the latest keep_n per side stay on screen
+  if (fireBuy && scoreBuy >= keepScore) {
+    const tag = buyTags[nBuy % keepN];
     nBuy += 1;
     sb_clear(); sb_int(i32(scoreBuy));
     tag.set(f64(t), l - 0.3 * atr).text(str_tag_sb).color(TEAL);
   }
-  if (fireSell) {
-    const tag = sellTags[nSell % MAX_TAGS];
+  if (fireSell && scoreSell >= keepScore) {
+    const tag = sellTags[nSell % keepN];
     nSell += 1;
     sb_clear(); sb_int(i32(scoreSell));
     tag.set(f64(t), h + 0.3 * atr).text(str_tag_sb).color(PINK);
