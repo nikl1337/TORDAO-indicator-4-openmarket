@@ -2,6 +2,20 @@
 // TORDAO indicator 4: LIQUIDITY AUCTION ZONES + AUTO TRENDLINES + VWAPs + EMA RIBBON
 // Rebuilt from the setting list + feature text, not the original sources. Untested until Run in the OpenMarket editor.
 
+// ---- Toggles
+param.bool("show_zones", true, { label: "Show auction zones" });
+param.bool("show_tl", true, { label: "Show trendlines + break/retest marks" });
+param.bool("show_vd", true, { label: "Show daily VWAP" });
+param.bool("show_vw", true, { label: "Show weekly VWAP" });
+param.bool("show_vm", true, { label: "Show monthly VWAP" });
+param.bool("show_e1", true, { label: "Show EMA 1 (21)" });
+param.bool("show_e2", true, { label: "Show EMA 2 (50)" });
+param.bool("show_e3", true, { label: "Show EMA 3 (144)" });
+param.bool("show_e4", true, { label: "Show EMA 4 (360)" });
+param.bool("show_e5", true, { label: "Show EMA 5 (667)" });
+param.bool("show_e6", true, { label: "Show EMA 6 (800)" });
+
+// ---- Settings
 param("swing_len", 5, { min: 2, max: 30, description: "Swing length (bars each side)" });
 param("zone_atr", 0.6, { min: 0.1, max: 3, description: "Zone depth in ATR" });
 param("near_atr", 1.5, { min: 0.3, max: 6, description: "Revisit-likely distance in ATR" });
@@ -37,12 +51,10 @@ output("ret_dn", shape, overlay, { color: "#f59e0b", shape_where: "g_ret_dn", lo
 output("brk_price", none, overlay, { description: "Exact break price (line value on the break bar)", format: "price" });
 output("fake_rate", none, lower, { description: "Fake-break rate", format: "%" });
 
-// VWAPs anchored on UTC calendar boundaries (built-in Vwap class)
 output("vwap_d", line, overlay, { color: "#38bdf8", width: 1, description: "Daily VWAP (UTC)" });
 output("vwap_w", line, overlay, { color: "#f5a623", width: 2, description: "Weekly VWAP (UTC)" });
 output("vwap_m", line, overlay, { color: "#c084fc", width: 2, description: "Monthly VWAP (UTC)" });
 
-// EMA ribbon, fast to slow
 output("ema_1", line, overlay, { color: "#fde047", width: 1, description: "EMA 21" });
 output("ema_2", line, overlay, { color: "#fb923c", width: 1, description: "EMA 50" });
 output("ema_3", line, overlay, { color: "#f43f5e", width: 2, description: "EMA 144" });
@@ -70,6 +82,9 @@ let right: i32 = 5;
 let idx: i32 = 0;
 let atr: f64 = NaN;
 let pClose: f64 = NaN;
+let shZones = true; let shTl = true;
+let shVd = true; let shVw = true; let shVm = true;
+let shE1 = true; let shE2 = true; let shE3 = true; let shE4 = true; let shE5 = true; let shE6 = true;
 let dT: f64 = NaN; let dB: f64 = NaN; let dL: f64 = 0.0; let dS: f64 = 0.0; let dTouch: i32 = 0; let dGhost: i32 = 0;
 let sT: f64 = NaN; let sB: f64 = NaN; let sL: f64 = 0.0; let sS: f64 = 0.0; let sTouch: i32 = 0; let sGhost: i32 = 0;
 let hp1: f64 = NaN; let hp2: f64 = NaN; let hp3: f64 = NaN; let hi1: i32 = 0; let hi2: i32 = 0; let hi3: i32 = 0;
@@ -92,6 +107,10 @@ function onStart(): void {
   e4 = new Ema(i32(p_ema4()));
   e5 = new Ema(i32(p_ema5()));
   e6 = new Ema(i32(p_ema6()));
+  shZones = pb_show_zones(); shTl = pb_show_tl();
+  shVd = pb_show_vd(); shVw = pb_show_vw(); shVm = pb_show_vm();
+  shE1 = pb_show_e1(); shE2 = pb_show_e2(); shE3 = pb_show_e3();
+  shE4 = pb_show_e4(); shE5 = pb_show_e5(); shE6 = pb_show_e6();
 }
 
 function onBar(): void {
@@ -163,28 +182,35 @@ function onBar(): void {
     }
   }
 
-  // VWAPs and EMAs
+  // VWAPs and EMAs: always update (state stays correct), only the drawing is toggled
   const vol = bar.volume();
   const t = bar.time();
-  out_vwap_d(vD.update(o, h, l, c, vol, t));
-  out_vwap_w(vW.update(o, h, l, c, vol, t));
-  out_vwap_m(vM.update(o, h, l, c, vol, t));
-  out_ema_1(e1.update(c));
-  out_ema_2(e2.update(c));
-  out_ema_3(e3.update(c));
-  out_ema_4(e4.update(c));
-  out_ema_5(e5.update(c));
-  out_ema_6(e6.update(c));
+  const vdv = vD.update(o, h, l, c, vol, t);
+  const vwv = vW.update(o, h, l, c, vol, t);
+  const vmv = vM.update(o, h, l, c, vol, t);
+  const v1 = e1.update(c); const v2 = e2.update(c); const v3 = e3.update(c);
+  const v4 = e4.update(c); const v5 = e5.update(c); const v6 = e6.update(c);
+  out_vwap_d(shVd ? vdv : NaN);
+  out_vwap_w(shVw ? vwv : NaN);
+  out_vwap_m(shVm ? vmv : NaN);
+  out_ema_1(shE1 ? v1 : NaN);
+  out_ema_2(shE2 ? v2 : NaN);
+  out_ema_3(shE3 ? v3 : NaN);
+  out_ema_4(shE4 ? v4 : NaN);
+  out_ema_5(shE5 ? v5 : NaN);
+  out_ema_6(shE6 ? v6 : NaN);
 
-  out_d_top(dT); out_d_bot(dB); out_d_live(dL); out_d_state(dS);
-  out_s_top(sT); out_s_bot(sB); out_s_live(sL); out_s_state(sS);
-  out_tl_res(rOn ? rv : NaN);
-  out_tl_sup(uOn ? uv : NaN);
-  out_g_brk_up(bu); out_g_brk_dn(bd); out_g_ret_up(ru); out_g_ret_dn(rd);
+  // Zones and trendlines: logic always runs, outputs gated by the toggles
+  out_d_top(dT); out_d_bot(dB); out_d_live(shZones ? dL : 0.0); out_d_state(dS);
+  out_s_top(sT); out_s_bot(sB); out_s_live(shZones ? sL : 0.0); out_s_state(sS);
+  out_tl_res(shTl && rOn ? rv : NaN);
+  out_tl_sup(shTl && uOn ? uv : NaN);
+  out_g_brk_up(shTl ? bu : 0.0); out_g_brk_dn(shTl ? bd : 0.0);
+  out_g_ret_up(shTl ? ru : 0.0); out_g_ret_dn(shTl ? rd : 0.0);
   out_brk_up(l); out_brk_dn(h); out_ret_up(l); out_ret_dn(h);
-  out_g_zone_lost(lost);
-  out_brk_price(bp);
-  out_fake_rate(breaks > 0 ? 100.0 * f64(fakes) / f64(breaks) : NaN);
+  out_g_zone_lost(shZones ? lost : 0.0);
+  out_brk_price(shTl ? bp : NaN);
+  out_fake_rate(shTl && breaks > 0 ? 100.0 * f64(fakes) / f64(breaks) : NaN);
   pClose = c;
   idx += 1;
 }
