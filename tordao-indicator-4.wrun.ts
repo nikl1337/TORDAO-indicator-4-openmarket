@@ -1,5 +1,5 @@
 //@lang=wrun-ts
-// TORDAO indicator 4: LIQUIDITY AUCTION ZONES + AUTO TRENDLINES
+// TORDAO indicator 4: LIQUIDITY AUCTION ZONES + AUTO TRENDLINES + VWAPs + EMA RIBBON
 // Rebuilt from the setting list + feature text, not the original sources. Untested until Run in the OpenMarket editor.
 
 param("swing_len", 5, { min: 2, max: 30, description: "Swing length (bars each side)" });
@@ -11,6 +11,12 @@ param("tl_tol", 0.35, { min: 0.05, max: 2, description: "Trendline 3rd-touch tol
 param("brk_buf", 0.1, { min: 0, max: 1, description: "Break buffer in ATR" });
 param("retest_bars", 20, { min: 3, max: 100, description: "Bars to wait for a retest" });
 param("fake_bars", 5, { min: 1, max: 30, description: "Close back inside within N bars = fake break" });
+param("ema1", 21, { min: 2, max: 2000, description: "EMA 1 length" });
+param("ema2", 50, { min: 2, max: 2000, description: "EMA 2 length" });
+param("ema3", 144, { min: 2, max: 2000, description: "EMA 3 length" });
+param("ema4", 360, { min: 2, max: 2000, description: "EMA 4 length" });
+param("ema5", 667, { min: 2, max: 2000, description: "EMA 5 length" });
+param("ema6", 800, { min: 2, max: 2000, description: "EMA 6 length" });
 
 // Zone state ladder: 0 fresh, 1 revisit likely, 2 tested/held, 3 swept (SFP), 4 lost (ghost)
 const dTop = output("d_top", none), dBot = output("d_bot", none), dLive = output("d_live", none), dState = output("d_state", none);
@@ -31,6 +37,19 @@ output("ret_dn", shape, overlay, { color: "#f59e0b", shape_where: "g_ret_dn", lo
 output("brk_price", none, overlay, { description: "Exact break price (line value on the break bar)", format: "price" });
 output("fake_rate", none, lower, { description: "Fake-break rate", format: "%" });
 
+// VWAPs anchored on UTC calendar boundaries (built-in Vwap class)
+output("vwap_d", line, overlay, { color: "#38bdf8", width: 1, description: "Daily VWAP (UTC)" });
+output("vwap_w", line, overlay, { color: "#f5a623", width: 2, description: "Weekly VWAP (UTC)" });
+output("vwap_m", line, overlay, { color: "#c084fc", width: 2, description: "Monthly VWAP (UTC)" });
+
+// EMA ribbon, fast to slow
+output("ema_1", line, overlay, { color: "#fde047", width: 1, description: "EMA 21" });
+output("ema_2", line, overlay, { color: "#fb923c", width: 1, description: "EMA 50" });
+output("ema_3", line, overlay, { color: "#f43f5e", width: 2, description: "EMA 144" });
+output("ema_4", line, overlay, { color: "#a855f7", width: 2, description: "EMA 360" });
+output("ema_5", line, overlay, { color: "#3b82f6", width: 2, description: "EMA 667" });
+output("ema_6", line, overlay, { color: "#e2e8f0", width: 3, description: "EMA 800" });
+
 alert("breakout", { when: gBU, message: "{{symbol}}: trendline BREAKOUT at {{close}}", description: "Trendline breakout" });
 alert("breakdown", { when: gBD, message: "{{symbol}}: trendline BREAKDOWN at {{close}}", description: "Trendline breakdown" });
 alert("retest_up", { when: gRU, message: "{{symbol}}: retest of broken resistance at {{close}}", description: "Retest (long)" });
@@ -38,6 +57,15 @@ alert("retest_dn", { when: gRD, message: "{{symbol}}: retest of broken support a
 alert("zone_lost", { when: gLost, message: "{{symbol}}: zone lost at {{close}}", description: "A zone was lost" });
 
 let sw = new Swings(5, 5);
+let vD = new Vwap("day", "hlc3");
+let vW = new Vwap("week", "hlc3");
+let vM = new Vwap("month", "hlc3");
+let e1 = new Ema(21);
+let e2 = new Ema(50);
+let e3 = new Ema(144);
+let e4 = new Ema(360);
+let e5 = new Ema(667);
+let e6 = new Ema(800);
 let right: i32 = 5;
 let idx: i32 = 0;
 let atr: f64 = NaN;
@@ -55,6 +83,15 @@ let breaks: i32 = 0; let fakes: i32 = 0;
 function onStart(): void {
   right = i32(p_swing_len());
   sw = new Swings(right, right);
+  vD = new Vwap("day", "hlc3");
+  vW = new Vwap("week", "hlc3");
+  vM = new Vwap("month", "hlc3");
+  e1 = new Ema(i32(p_ema1()));
+  e2 = new Ema(i32(p_ema2()));
+  e3 = new Ema(i32(p_ema3()));
+  e4 = new Ema(i32(p_ema4()));
+  e5 = new Ema(i32(p_ema5()));
+  e6 = new Ema(i32(p_ema6()));
 }
 
 function onBar(): void {
@@ -125,6 +162,19 @@ function onBar(): void {
       else if (idx - uBrokeAt > rb) uOn = false;
     }
   }
+
+  // VWAPs and EMAs
+  const vol = bar.volume();
+  const t = bar.time();
+  out_vwap_d(vD.update(o, h, l, c, vol, t));
+  out_vwap_w(vW.update(o, h, l, c, vol, t));
+  out_vwap_m(vM.update(o, h, l, c, vol, t));
+  out_ema_1(e1.update(c));
+  out_ema_2(e2.update(c));
+  out_ema_3(e3.update(c));
+  out_ema_4(e4.update(c));
+  out_ema_5(e5.update(c));
+  out_ema_6(e6.update(c));
 
   out_d_top(dT); out_d_bot(dB); out_d_live(dL); out_d_state(dS);
   out_s_top(sT); out_s_bot(sB); out_s_live(sL); out_s_state(sS);
