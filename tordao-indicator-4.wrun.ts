@@ -1,10 +1,15 @@
 //@lang=wrun-ts
-// TORDAO indicator 4: LIQUIDITY AUCTION ZONES + AUTO TRENDLINES + VWAPs + EMA RIBBON
+// TORDAO indicator 4: AUCTION ZONES + AUTO TRENDLINES + VWAPs + EMA RIBBON + POC + CONFLUENCE SCORE
 // Rebuilt from the setting list + feature text, not the original sources. Untested until Run in the OpenMarket editor.
+
+input("close", ohlcv.close); // primary input: the chart's own candles define the grid
+input("profile", volume_profile.cells, { max_cells: 8192, missing: "empty", description: "This bar's volume by price level (follows the chart timeframe)" });
 
 // ---- Toggles
 param.bool("show_zones", true, { label: "Show auction zones" });
 param.bool("show_tl", true, { label: "Show trendlines + break/retest marks" });
+param.bool("show_poc", true, { label: "Show point of control (chart timeframe)" });
+param.bool("show_sig", true, { label: "Show neon zone reactions + confluence numbers" });
 param.bool("show_vd", true, { label: "Show daily VWAP" });
 param.bool("show_vw", true, { label: "Show weekly VWAP" });
 param.bool("show_vm", true, { label: "Show monthly VWAP" });
@@ -25,6 +30,10 @@ param("tl_tol", 0.35, { min: 0.05, max: 2, description: "Trendline 3rd-touch tol
 param("brk_buf", 0.1, { min: 0, max: 1, description: "Break buffer in ATR" });
 param("retest_bars", 20, { min: 3, max: 100, description: "Bars to wait for a retest" });
 param("fake_bars", 5, { min: 1, max: 30, description: "Close back inside within N bars = fake break" });
+param("poc_lookback", 24, { min: 2, max: 200, description: "Bars used for the developing POC level (heaviest bar POC)" });
+param("react_wick", 0.3, { min: 0, max: 0.9, description: "Min rejection wick as share of the bar range for a zone reaction" });
+param("conf_tol", 0.4, { min: 0.05, max: 3, description: "A level is in confluence when within this many ATR of the zone" });
+param("min_score", 35, { min: 1, max: 100, description: "Only mark reactions with a confluence score at or above this" });
 param("ema1", 21, { min: 2, max: 2000, description: "EMA 1 length" });
 param("ema2", 50, { min: 2, max: 2000, description: "EMA 2 length" });
 param("ema3", 144, { min: 2, max: 2000, description: "EMA 3 length" });
@@ -39,6 +48,19 @@ box("demand_zone", { top: dTop, bottom: dBot, when: dLive, colorBy: dState, bord
   colors: ["#22c55e", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColors: ["#22c55e", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColorBy: dState });
 box("supply_zone", { top: sTop, bottom: sBot, when: sLive, colorBy: sState, borderWidth: 1, borderStyle: "solid", opacity: 0.22,
   colors: ["#ef4444", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColors: ["#ef4444", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColorBy: sState });
+
+// Neon highlight when price reacts inside a zone: teal = buy, pink = sell
+const gBuy = output("g_buy", none), gSell = output("g_sell", none);
+box("neon_buy", { top: dTop, bottom: dBot, when: gBuy, color: "#00ffd5", opacity: 0.5, borderColor: "#00ffd5", borderWidth: 2, z: 5 });
+box("neon_sell", { top: sTop, bottom: sBot, when: gSell, color: "#ff2bd6", opacity: 0.5, borderColor: "#ff2bd6", borderWidth: 2, z: 5 });
+output("sig_buy", shape, overlay, { color: "#00ffd5", shape_where: "g_buy", shape: "triangle_up", location: "below_bar", glow: 8, description: "Buy reaction in a zone (neon teal)" });
+output("sig_sell", shape, overlay, { color: "#ff2bd6", shape_where: "g_sell", shape: "triangle_down", location: "above_bar", glow: 8, description: "Sell reaction in a zone (neon pink)" });
+output("conf_buy", histogram, lower, { color: "#00ffd5", description: "Buy confluence score 1-100", format: "int" });
+output("conf_sell", histogram, lower, { color: "#ff2bd6", description: "Sell confluence score 1-100", format: "int" });
+
+// Point of control: the chart's own volume profile per bar, so it follows the timeframe you are on
+output("poc_bar", scatter, overlay, { color: "#fbbf24", description: "POC of each bar (chart timeframe)" });
+output("poc_lvl", line, overlay, { color: "#f59e0b", width: 2, step: true, line_style: "dotted", description: "Developing POC level (heaviest bar POC in the lookback)" });
 
 output("tl_res", line, overlay, { color: "#ef4444", width: 2, line_style: "dashed", description: "Descending 3-touch trendline" });
 output("tl_sup", line, overlay, { color: "#22c55e", width: 2, line_style: "dashed", description: "Ascending 3-touch trendline" });
@@ -67,6 +89,37 @@ alert("breakdown", { when: gBD, message: "{{symbol}}: trendline BREAKDOWN at {{c
 alert("retest_up", { when: gRU, message: "{{symbol}}: retest of broken resistance at {{close}}", description: "Retest (long)" });
 alert("retest_dn", { when: gRD, message: "{{symbol}}: retest of broken support at {{close}}", description: "Retest (short)" });
 alert("zone_lost", { when: gLost, message: "{{symbol}}: zone lost at {{close}}", description: "A zone was lost" });
+alert("buy_reaction", { when: gBuy, message: "{{symbol}}: BUY reaction in demand zone at {{close}}", description: "Neon teal buy reaction" });
+alert("sell_reaction", { when: gSell, message: "{{symbol}}: SELL reaction in supply zone at {{close}}", description: "Neon pink sell reaction" });
+
+// Number labels for the confluence score
+string("tag", { max_bytes: 16 });
+handles.label({ size: 12 });
+const MAX_TAGS = 24;
+const TEAL: i32 = rgba(0, 255, 213, 255);
+const PINK: i32 = rgba(255, 43, 214, 255);
+function makeLabels(first: i32, count: i32): LabelHandle[] {
+  const out: LabelHandle[] = [];
+  for (let i = 0; i < count; i += 1) out.push(draw.label(first + i));
+  return out;
+}
+const buyTags = makeLabels(0, MAX_TAGS);
+const sellTags = makeLabels(MAX_TAGS, MAX_TAGS);
+let nBuy: i32 = 0;
+let nSell: i32 = 0;
+
+// A level is in confluence when it sits inside the zone, widened by tol
+function inBand(level: f64, lo: f64, hi: f64, tol: f64): bool {
+  return !isNaN(level) && !isNaN(lo) && !isNaN(hi) && level >= lo - tol && level <= hi + tol;
+}
+
+const MAXP = 200;
+const pocRing = new StaticArray<f64>(MAXP);
+const pocVolRing = new StaticArray<f64>(MAXP);
+let pcur: i32 = 0;
+let pcount: i32 = 0;
+let pN: i32 = 24;
+let pocLvl: f64 = NaN;
 
 let sw = new Swings(5, 5);
 let vD = new Vwap("day", "hlc3");
@@ -82,7 +135,7 @@ let right: i32 = 5;
 let idx: i32 = 0;
 let atr: f64 = NaN;
 let pClose: f64 = NaN;
-let shZones = true; let shTl = true;
+let shZones = true; let shTl = true; let shPoc = true; let shSig = true;
 let shVd = true; let shVw = true; let shVm = true;
 let shE1 = true; let shE2 = true; let shE3 = true; let shE4 = true; let shE5 = true; let shE6 = true;
 let dT: f64 = NaN; let dB: f64 = NaN; let dL: f64 = 0.0; let dS: f64 = 0.0; let dTouch: i32 = 0; let dGhost: i32 = 0;
@@ -98,6 +151,7 @@ let breaks: i32 = 0; let fakes: i32 = 0;
 function onStart(): void {
   right = i32(p_swing_len());
   sw = new Swings(right, right);
+  pN = i32(p_poc_lookback());
   vD = new Vwap("day", "hlc3");
   vW = new Vwap("week", "hlc3");
   vM = new Vwap("month", "hlc3");
@@ -107,7 +161,7 @@ function onStart(): void {
   e4 = new Ema(i32(p_ema4()));
   e5 = new Ema(i32(p_ema5()));
   e6 = new Ema(i32(p_ema6()));
-  shZones = pb_show_zones(); shTl = pb_show_tl();
+  shZones = pb_show_zones(); shTl = pb_show_tl(); shPoc = pb_show_poc(); shSig = pb_show_sig();
   shVd = pb_show_vd(); shVw = pb_show_vw(); shVm = pb_show_vm();
   shE1 = pb_show_e1(); shE2 = pb_show_e2(); shE3 = pb_show_e3();
   shE4 = pb_show_e4(); shE5 = pb_show_e5(); shE6 = pb_show_e6();
@@ -182,7 +236,7 @@ function onBar(): void {
     }
   }
 
-  // VWAPs and EMAs: always update (state stays correct), only the drawing is toggled
+  // ---- VWAPs and EMAs: always update (state stays correct), only the drawing is toggled
   const vol = bar.volume();
   const t = bar.time();
   const vdv = vD.update(o, h, l, c, vol, t);
@@ -190,6 +244,88 @@ function onBar(): void {
   const vmv = vM.update(o, h, l, c, vol, t);
   const v1 = e1.update(c); const v2 = e2.update(c); const v3 = e3.update(c);
   const v4 = e4.update(c); const v5 = e5.update(c); const v6 = e6.update(c);
+
+  // ---- POC from this bar's own volume profile (the chart serves it at the chart timeframe)
+  let barPoc: f64 = NaN;
+  let barPocVol: f64 = NaN;
+  const pn = in_profile_cells();
+  if (pn >= 4) {
+    const cells = in_profile_view();
+    barPoc = vpPoc(cells, pn);
+    barPocVol = vpPocVolume(cells, pn);
+  }
+  pocRing[pcur] = barPoc;
+  pocVolRing[pcur] = barPocVol;
+  pcur = (pcur + 1) % MAXP;
+  if (pcount < MAXP) pcount += 1;
+  // developing POC level: the POC of the heaviest bar inside the lookback window
+  let best: f64 = -1.0;
+  const span = pcount < pN ? pcount : pN;
+  for (let k = 1; k <= span; k++) {
+    const j = (pcur - k + MAXP) % MAXP;
+    const pv = pocVolRing[j];
+    if (!isNaN(pv) && pv > best) { best = pv; pocLvl = pocRing[j]; }
+  }
+  if (best < 0.0) pocLvl = NaN;
+
+  // ---- Zone reactions: price touches a live zone and rejects it
+  const range = h - l;
+  const lowWick = Math.min(o, c) - l;
+  const upWick = h - Math.max(o, c);
+  const wickMin = p_react_wick();
+  const buyReact = dL == 1.0 && dS < 4.0 && !isNaN(dT) && l <= dT && c > dB && c > o && range > 0.0 && lowWick / range >= wickMin;
+  const sellReact = sL == 1.0 && sS < 4.0 && !isNaN(sB) && h >= sB && c < sT && c < o && range > 0.0 && upWick / range >= wickMin;
+
+  // ---- Confluence score 1-100: zone 25, POC 10, VWAP 20, EMA 25, trendline 20
+  const ct = p_conf_tol() * atr;
+  let scoreBuy: f64 = 0.0;
+  let scoreSell: f64 = 0.0;
+  if (buyReact) {
+    let s = 25.0;
+    if (shPoc && (inBand(pocLvl, dB, dT, ct) || inBand(barPoc, dB, dT, ct))) s += 10.0;
+    if (shVd && inBand(vdv, dB, dT, ct)) s += 5.0;
+    if (shVw && inBand(vwv, dB, dT, ct)) s += 7.0;
+    if (shVm && inBand(vmv, dB, dT, ct)) s += 8.0;
+    if (shE1 && inBand(v1, dB, dT, ct)) s += 2.0;
+    if (shE2 && inBand(v2, dB, dT, ct)) s += 3.0;
+    if (shE3 && inBand(v3, dB, dT, ct)) s += 4.0;
+    if (shE4 && inBand(v4, dB, dT, ct)) s += 5.0;
+    if (shE5 && inBand(v5, dB, dT, ct)) s += 5.0;
+    if (shE6 && inBand(v6, dB, dT, ct)) s += 6.0;
+    if (shTl && uOn && inBand(uv, dB, dT, ct)) { s += 12.0; if (ru == 1.0 || bu == 1.0) s += 8.0; }
+    scoreBuy = Math.max(1.0, Math.min(100.0, Math.round(s)));
+  }
+  if (sellReact) {
+    let s = 25.0;
+    if (shPoc && (inBand(pocLvl, sB, sT, ct) || inBand(barPoc, sB, sT, ct))) s += 10.0;
+    if (shVd && inBand(vdv, sB, sT, ct)) s += 5.0;
+    if (shVw && inBand(vwv, sB, sT, ct)) s += 7.0;
+    if (shVm && inBand(vmv, sB, sT, ct)) s += 8.0;
+    if (shE1 && inBand(v1, sB, sT, ct)) s += 2.0;
+    if (shE2 && inBand(v2, sB, sT, ct)) s += 3.0;
+    if (shE3 && inBand(v3, sB, sT, ct)) s += 4.0;
+    if (shE4 && inBand(v4, sB, sT, ct)) s += 5.0;
+    if (shE5 && inBand(v5, sB, sT, ct)) s += 5.0;
+    if (shE6 && inBand(v6, sB, sT, ct)) s += 6.0;
+    if (shTl && rOn && inBand(rv, sB, sT, ct)) { s += 12.0; if (rd == 1.0 || bd == 1.0) s += 8.0; }
+    scoreSell = Math.max(1.0, Math.min(100.0, Math.round(s)));
+  }
+  const minS = p_min_score();
+  const fireBuy = shSig && scoreBuy >= minS && scoreBuy > 0.0;
+  const fireSell = shSig && scoreSell >= minS && scoreSell > 0.0;
+  if (fireBuy) {
+    const tag = buyTags[nBuy % MAX_TAGS];
+    nBuy += 1;
+    sb_clear(); sb_int(i32(scoreBuy));
+    tag.set(f64(t), l - 0.3 * atr).text(str_tag_sb).color(TEAL);
+  }
+  if (fireSell) {
+    const tag = sellTags[nSell % MAX_TAGS];
+    nSell += 1;
+    sb_clear(); sb_int(i32(scoreSell));
+    tag.set(f64(t), h + 0.3 * atr).text(str_tag_sb).color(PINK);
+  }
+
   out_vwap_d(shVd ? vdv : NaN);
   out_vwap_w(shVw ? vwv : NaN);
   out_vwap_m(shVm ? vmv : NaN);
@@ -199,8 +335,16 @@ function onBar(): void {
   out_ema_4(shE4 ? v4 : NaN);
   out_ema_5(shE5 ? v5 : NaN);
   out_ema_6(shE6 ? v6 : NaN);
+  out_poc_bar(shPoc ? barPoc : NaN);
+  out_poc_lvl(shPoc ? pocLvl : NaN);
 
-  // Zones and trendlines: logic always runs, outputs gated by the toggles
+  out_g_buy(fireBuy ? 1.0 : 0.0);
+  out_g_sell(fireSell ? 1.0 : 0.0);
+  out_sig_buy(l);
+  out_sig_sell(h);
+  out_conf_buy(fireBuy ? scoreBuy : NaN);
+  out_conf_sell(fireSell ? scoreSell : NaN);
+
   out_d_top(dT); out_d_bot(dB); out_d_live(shZones ? dL : 0.0); out_d_state(dS);
   out_s_top(sT); out_s_bot(sB); out_s_live(shZones ? sL : 0.0); out_s_state(sS);
   out_tl_res(shTl && rOn ? rv : NaN);
