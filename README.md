@@ -1,40 +1,60 @@
-# TORDAO indicator 4 openmarket
+# TORDAO indicator 4 — OpenMarket (wrun)
 
-A wrun indicator for OpenMarket ([wrun docs](https://openmarket.xyz/wrun/llms.txt)).
+**Status:** Core file runs on OpenMarket (browser indicator).
 
-**Main file: `tordao-indicator-4-merged.wrun.ts`** (same content as `kata-bozo-5-ALL-IN-ONE-merged.wrun.ts`). Drawing handles are capped at **57** so the file stays under OpenMarket’s **64 drawings per indicator** limit.
+## Install (OpenMarket has no GitHub one-click install)
 
-The `module-*.wrun.ts`, `kata-bozo-1..4`, and `tordao-indicator-4.wrun.ts` files are the earlier standalone pieces (optional; not required if you use the merge).
+1. Open a chart on [openmarket.xyz](https://openmarket.xyz) (signed in).
+2. Toolbar → **Editor**.
+3. **New indicator** → **Blank indicator**.
+4. Keep line 1 as: `//@lang=wrun-ts`
+5. Open this file on GitHub → **Raw** → select all → copy:
+   - [`final-approved-by-openmarket.wrun.ts`](./final-approved-by-openmarket.wrun.ts)
+6. Paste under line 1 in the editor (if a second `//@lang=wrun-ts` appears, delete the duplicate).
+7. Press **Run**.
 
-## Install (OpenMarket chart)
+You should see auction zones, EMA ribbon, VWAPs, POC, trendlines, and zone reaction marks.
 
-1. Sign in on [openmarket.xyz](https://openmarket.xyz).
-2. Chart toolbar → **Editor** (code icon; or **Panels**).
-3. Explorer → **New indicator** → **Blank indicator**.
-4. Open [`tordao-indicator-4-merged.wrun.ts`](./tordao-indicator-4-merged.wrun.ts) → **Raw** → select all → copy.
-5. Paste over the blank tab. Keep the first line `//@lang=wrun-ts`.
-6. Press **Run**.
+## What this file is
 
-There is no GitHub install button: one file, paste, Run.
+Single-file **core** TORDAO for OpenMarket wrun-ts:
 
-## What is in the merge
+- Auction demand / supply zones (state ladder)
+- Auto trendlines + break / retest marks
+- Daily / weekly / monthly VWAP
+- EMA ribbon (21 / 50 / 144 / 360 / 667 / 800)
+- Bar POC + developing POC (volume profile cells)
+- Neon zone reactions + confluence score histograms
+- Alerts for break, retest, zone lost, buy/sell reaction
 
-1. Auction zones (fresh / revisit / held / swept / lost).
-2. Auto 3-touch trendlines, break/retest marks, break price, fake-break rate, alerts.
-3. Daily / weekly / monthly VWAP and EMA 21 / 50 / 144 / 360 / 667 / 800.
-4. Point of control from the chart volume profile.
-5. Neon buy/sell zone reactions with confluence score (up to 4 number labels per side).
-6. SFP, HTF double top/bottom, manipulation boxes, ABCD (polyline + D label).
-7. Weekly levels, trendlines, channels, pattern path.
-8. Daily / weekly / monthly open, previous-day EQ, current-day EQ.
-9. Bat / butterfly polylines + name at D; 15m and 1h reversal candle tags (last 4 each).
+Drawing budget stays under OpenMarket’s 64-handle limit (no score number labels in this build).
 
-Drawing budget trade-offs vs the first merge draft: fewer score tags (4+4), ABCD marks only at D, no XABCD point labels on harmonics, 4 reversal tags per TF.
+## Bug fixes included (vs early merges)
 
-## Sound
+| Issue | Fix |
+|---|---|
+| `This indicator declares nothing` | Valid top-level `param` / `input` / `output` + `onBar` |
+| Handle not bound (`dBot`, `gSell`, …) | One `const x = output(...)` **per line** (no comma chains) |
+| `vpPoc` / `vpPocVolume` not found | Local helpers over `[low, high, buy, sell]` cells |
+| `++` / `--` strict mode | Replaced with `+= 1` / `-= 1` |
+| Plain `param` + `when` refused | Removed `when` from plain `param(...)` |
+| Paste truncated mid-file | Compact file (~18KB) so full paste fits |
+| Drawing limit 113 > 64 | Core build without extra label rings |
 
-All signals are declared alerts. Indicator settings → Chart → Sounds → enable Play sounds and pick a sound per signal. Each signal also has an on/off switch under Signals.
+Soft Problems hints like *param is read only inside branches show_sig* are UI advice only; they do not block **Run**.
 
-## Status
+## Repo files
 
-Drawing count is under the platform cap. First **Run** may still show compiler messages if the kit differs from this draft — paste **Problems** if something fails and iterate.
+| File | Role |
+|---|---|
+| **`final-approved-by-openmarket.wrun.ts`** | **Use this** — working core |
+| `kata-bozo-1-…` / modules | Earlier splits / experiments |
+| `tordao-indicator-4-merged.wrun.ts` | May be stub or older; prefer the final file above |
+
+## Optional next modules
+
+SFP, double top/bottom, ABCD, HTF levels, bat/butterfly can be added later in separate tabs or a carefully slimmed merge (stay ≤ 64 drawings).
+
+## License
+
+Same as the repository owner’s choice for this repo.
