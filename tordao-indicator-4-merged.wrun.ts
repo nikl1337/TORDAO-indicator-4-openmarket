@@ -1,21 +1,16 @@
 //@lang=wrun-ts
-// TORDAO indicator 4 (MERGED): auction zones, auto trendlines, VWAPs, EMA ribbon, POC, neon reactions + confluence 1-100,
-// SFP, HTF double top/bottom, ABC, HTF levels/trendlines/channels, D/W/M opens, daily EQ, butterfly/bat, 15m/1h reversal candles.
-// Rebuilt from setting lists + feature text, not the original sources. UNTESTED until Run in the OpenMarket editor.
-// Handle ids (one space): 0-23 score labels, 40-67 ABC, 100-112 HTF, 200-253 harmonics + candle tags.
-// Sound: Chart tab > Sounds in this indicator's settings (Play sounds + one sound per signal).
+// TORDAO indicator 4 (MERGED). UNTESTED as a whole; the SFP/double-top/manipulation part compiled in Kata. Sound: Chart > Sounds.
+// Handle ids: 0-23 score labels, 40-45 manip boxes, 50-55 manip labels, 60-63 abcd lines, 70-85 abcd labels, 100-111 lines, 112 weekly path, 200-253 harmonics/candles.
 
 input("close", ohlcv.close);
-input("profile", volume_profile.cells, { max_cells: 8192, missing: "empty", description: "This bar's volume by price level (follows the chart timeframe)" });
-input("wk", candles.cells, { interval: "1w", bars: 300, description: "Closed weekly candles (very high timeframe)" });
+input("profile", volume_profile.cells, { max_cells: 8192, missing: "empty", description: "This bar's volume by price level" });
+input("wk", candles.cells, { interval: "1w", bars: 300, description: "Closed weekly candles" });
 input("c15", candles.cells, { interval: "15m", bars: 8, max_cells: 64, description: "Closed 15m candles" });
 input("c60", candles.cells, { interval: "1h", bars: 8, max_cells: 16, description: "Closed 1h candles" });
 
-// ================= SETTINGS =================
-page("Display");
 param.bool("show_zones", true, { label: "Show auction zones" });
 param.bool("show_tl", true, { label: "Show trendlines + break/retest marks" });
-param.bool("show_poc", true, { label: "Show point of control (chart timeframe)" });
+param.bool("show_poc", true, { label: "Show point of control" });
 param.bool("show_sig", true, { label: "Show neon zone reactions + confluence numbers" });
 param.bool("show_vd", true, { label: "Show daily VWAP" });
 param.bool("show_vw", true, { label: "Show weekly VWAP" });
@@ -26,49 +21,43 @@ param.bool("show_e3", true, { label: "Show EMA 3 (144)" });
 param.bool("show_e4", true, { label: "Show EMA 4 (360)" });
 param.bool("show_e5", true, { label: "Show EMA 5 (667)" });
 param.bool("show_e6", true, { label: "Show EMA 6 (800)" });
-param.bool("show_levels", true, { label: "Exact HTF levels (last 3 swing highs and lows)" });
+param.bool("show_levels", true, { label: "HTF levels (last 3 swing highs and lows)" });
 param.bool("show_trend", true, { label: "HTF trendlines" });
-param.bool("show_channel", true, { label: "Parallel channels + middle lines" });
-param.bool("show_pattern", true, { label: "Pattern line through the last HTF price points" });
+param.bool("show_channel", true, { label: "HTF channels + middle lines" });
+param.bool("show_pattern", true, { label: "HTF pattern line" });
 param.bool("show_do", true, { label: "Daily open" });
 param.bool("show_wo", true, { label: "Weekly open" });
 param.bool("show_mo", true, { label: "Monthly open" });
 param.bool("show_peq", true, { label: "EQ of previous day (neon green)" });
 param.bool("show_ceq", true, { label: "EQ of current day (neon pink)" });
+param.bool("en_sfp", true, { label: "Signal: swing failure pattern" });
+param.bool("en_dbl", true, { label: "Signal: HTF double top / bottom" });
+param.bool("en_manip", true, { label: "Signal: manipulation boxes" });
+param.bool("en_abcd", true, { label: "Signal: ABCD pattern" });
+param.bool("en_15", true, { label: "Signal: 15m reversal candles" });
+param.bool("en_60", true, { label: "Signal: 1h reversal candles" });
+param.bool("en_doji", true, { label: "Reversal: doji" });
+param.bool("en_hammer", true, { label: "Reversal: hammer / shooting star" });
+param.bool("en_bat", true, { label: "Signal: bat pattern" });
+param.bool("en_fly", true, { label: "Signal: butterfly pattern" });
 
-page("Signals");
-note("Sound: Chart tab, Sounds. Turn on Play sounds and pick a sound per signal. A switch below turns a signal off completely.");
-param.bool("en_sfp", true, { label: "Swing failure pattern signals" });
-param.bool("en_dbl", true, { label: "HTF double top / bottom signals" });
-param.bool("en_abc", true, { label: "ABC correction boxes + signal" });
-param.bool("en_15", true, { label: "15m doji / hammer / shooting star reversals" });
-param.bool("en_60", true, { label: "1h doji / hammer / shooting star reversals" });
-param.bool("en_doji", true, { label: "Doji" });
-param.bool("en_hammer", true, { label: "Hammer (bottom) and shooting star (top)" });
-param.bool("en_bat", true, { label: "Bat pattern" });
-param.bool("en_fly", true, { label: "Butterfly pattern" });
-
-page("Logic");
-param("swing_len", 5, { min: 2, max: 30, description: "Swing length (bars each side), shared by zones, trendlines, SFP, ABC, harmonics" });
+param("swing_len", 5, { min: 2, max: 30, description: "Swing length (bars each side), shared" });
 param("zone_atr", 0.6, { min: 0.1, max: 3, description: "Zone depth in ATR" });
 param("near_atr", 1.5, { min: 0.3, max: 6, description: "Revisit-likely distance in ATR" });
-param("max_touch", 3, { min: 1, max: 10, description: "Touches before a zone counts as worn out" });
+param("max_touch", 3, { min: 1, max: 10, description: "Touches before a zone is worn out" });
 param("allow_sfp", 1, { min: 0, max: 1, description: "Sweep and reclaim keeps the zone (1) or kills it (0)" });
 param("tl_tol", 0.35, { min: 0.05, max: 2, description: "Trendline 3rd-touch tolerance in ATR" });
 param("brk_buf", 0.1, { min: 0, max: 1, description: "Break buffer in ATR" });
 param("retest_bars", 20, { min: 3, max: 100, description: "Bars to wait for a retest" });
 param("fake_bars", 5, { min: 1, max: 30, description: "Close back inside within N bars = fake break" });
-param("poc_lookback", 24, { min: 2, max: 200, description: "Bars used for the developing POC level" });
-param("react_wick", 0.3, { min: 0, max: 0.9, description: "Min rejection wick as share of the bar range for a zone reaction" });
-param("conf_tol", 0.4, { min: 0.05, max: 3, description: "A level is in confluence when within this many ATR of the zone" });
-param("min_score", 35, { min: 1, max: 100, description: "Only mark reactions (glow, triangle, alert) with a score at or above this" });
-param("keep_score", 60, { min: 1, max: 100, description: "Number labels stay only for scores at or above this" });
-param("keep_n", 4, { min: 1, max: 12, description: "How many of the latest buy and of the latest sell number labels stay" });
-
-page("Confluence weights");
-note("Defaults add up to 100 when everything lines up.");
-param("w_base", 25, { min: 0, max: 100, description: "Weight: zone reaction itself" });
-param("w_poc", 10, { min: 0, max: 100, description: "Weight: POC inside the zone" });
+param("poc_lookback", 24, { min: 2, max: 200, description: "Bars for the developing POC level" });
+param("react_wick", 0.3, { min: 0, max: 0.9, description: "Min rejection wick share for a zone reaction" });
+param("conf_tol", 0.4, { min: 0.05, max: 3, description: "Confluence when within this many ATR of the zone" });
+param("min_score", 35, { min: 1, max: 100, description: "Mark reactions with a score at or above this" });
+param("keep_score", 60, { min: 1, max: 100, description: "Number labels only for scores at or above this" });
+param("keep_n", 4, { min: 1, max: 12, description: "Latest buy and sell number labels kept" });
+param("w_base", 25, { min: 0, max: 100, description: "Weight: zone reaction" });
+param("w_poc", 10, { min: 0, max: 100, description: "Weight: POC" });
 param("w_vd", 5, { min: 0, max: 100, description: "Weight: daily VWAP" });
 param("w_vw", 7, { min: 0, max: 100, description: "Weight: weekly VWAP" });
 param("w_vm", 8, { min: 0, max: 100, description: "Weight: monthly VWAP" });
@@ -79,60 +68,52 @@ param("w_e4", 5, { min: 0, max: 100, description: "Weight: EMA 4" });
 param("w_e5", 5, { min: 0, max: 100, description: "Weight: EMA 5" });
 param("w_e6", 6, { min: 0, max: 100, description: "Weight: EMA 6" });
 param("w_tl", 12, { min: 0, max: 100, description: "Weight: trendline at the zone" });
-param("w_tlb", 8, { min: 0, max: 100, description: "Weight: extra when that trendline just broke or was retested" });
-
-page("EMA lengths");
+param("w_tlb", 8, { min: 0, max: 100, description: "Weight: trendline just broke or retested" });
 param("ema1", 21, { min: 2, max: 2000, description: "EMA 1 length" });
 param("ema2", 50, { min: 2, max: 2000, description: "EMA 2 length" });
 param("ema3", 144, { min: 2, max: 2000, description: "EMA 3 length" });
 param("ema4", 360, { min: 2, max: 2000, description: "EMA 4 length" });
 param("ema5", 667, { min: 2, max: 2000, description: "EMA 5 length" });
 param("ema6", 800, { min: 2, max: 2000, description: "EMA 6 length" });
-
-page("SFP, double top, ABC");
 param.int("sfp_bars", 1, { min: 1, max: 5, label: "SFP: bars allowed to close back inside" });
 param.number("sfp_min_atr", 0.05, { min: 0, max: 2, step: 0.01, label: "SFP: min sweep depth in ATR" });
-param.int("htf_min", 240, { min: 5, max: 10080, label: "Double top/bottom timeframe in minutes (240 = 4h, 1440 = 1d)" });
-param.int("htf_len", 3, { min: 2, max: 10, label: "Swing length in higher-timeframe candles (double top and weekly levels)" });
+param.int("htf_min", 240, { min: 5, max: 10080, label: "Double top timeframe in minutes" });
+param.int("htf_len", 3, { min: 2, max: 10, label: "Swing length in HTF candles (double top, weekly levels)" });
 param.number("dbl_tol", 0.3, { min: 0.05, max: 3, step: 0.05, label: "Double top: peak match tolerance in percent" });
-param.number("dbl_depth", 0.8, { min: 0.1, max: 20, step: 0.1, label: "Double top: min depth between the peaks in percent" });
+param.number("dbl_depth", 0.8, { min: 0.1, max: 20, step: 0.1, label: "Double top: min depth in percent" });
 param.int("dbl_gap_min", 4, { min: 2, max: 100, label: "Double top: min HTF candles between peaks" });
 param.int("dbl_gap_max", 60, { min: 5, max: 400, label: "Double top: max HTF candles between peaks" });
-param.number("abc_lo", 90, { min: 50, max: 100, step: 1, label: "ABC: AB at least this percent of BC" });
-param.number("abc_hi", 110, { min: 100, max: 200, step: 1, label: "ABC: AB at most this percent of BC" });
-param.number("abc_min_atr", 1.5, { min: 0, max: 20, step: 0.1, label: "ABC: min leg size in ATR" });
-
-page("HTF lines");
-param.int("pattern_pts", 8, { min: 3, max: 24, label: "Price points joined by the pattern line" });
-
-page("Candles and harmonics");
+param.number("manip_lo", 90, { min: 50, max: 100, step: 1, label: "Manipulation: AB at least this percent of BC" });
+param.number("manip_hi", 110, { min: 100, max: 200, step: 1, label: "Manipulation: AB at most this percent of BC" });
+param.number("manip_min_atr", 1.5, { min: 0, max: 20, step: 0.1, label: "Manipulation: min leg size in ATR" });
+param.number("abcd_ret_lo", 38.2, { min: 10, max: 100, step: 0.1, label: "ABCD: BC retraces at least this percent of AB" });
+param.number("abcd_ret_hi", 88.6, { min: 10, max: 100, step: 0.1, label: "ABCD: BC retraces at most this percent of AB" });
+param.number("abcd_cd_lo", 90, { min: 50, max: 200, step: 1, label: "ABCD: CD at least this percent of AB" });
+param.number("abcd_cd_hi", 110, { min: 50, max: 300, step: 1, label: "ABCD: CD at most this percent of AB" });
+param.number("abcd_min_atr", 1.5, { min: 0, max: 20, step: 0.1, label: "ABCD: min AB size in ATR" });
+param.int("pattern_pts", 8, { min: 3, max: 24, label: "HTF pattern line: price points joined" });
 param.number("doji_pct", 10, { min: 1, max: 30, step: 1, label: "Doji: body at most this percent of the range" });
-param.number("wick_mult", 2, { min: 1, max: 5, step: 0.1, label: "Hammer / star: long wick at least this many bodies" });
-param.number("small_wick", 15, { min: 0, max: 40, step: 1, label: "Hammer / star: opposite wick at most this percent of the range" });
-param.number("min_range", 0.8, { min: 0, max: 3, step: 0.1, label: "Min candle range vs the average of the last 5" });
-param.int("trend_n", 5, { min: 2, max: 12, label: "Prior trend: compare with the close this many candles back" });
-param.number("fib_tol", 0.05, { min: 0.01, max: 0.15, step: 0.01, label: "Harmonics: ratio tolerance (absolute)" });
+param.number("wick_mult", 2, { min: 1, max: 5, step: 0.1, label: "Hammer: long wick at least this many bodies" });
+param.number("small_wick", 15, { min: 0, max: 40, step: 1, label: "Hammer: opposite wick at most this percent" });
+param.number("min_range", 0.8, { min: 0, max: 3, step: 0.1, label: "Reversal: min range vs average of last 5" });
+param.int("trend_n", 5, { min: 2, max: 12, label: "Reversal: prior trend lookback in candles" });
+param.number("fib_tol", 0.05, { min: 0.01, max: 0.15, step: 0.01, label: "Harmonics: ratio tolerance" });
 
-// ================= OUTPUTS =================
-// Zone state ladder: 0 fresh, 1 revisit likely, 2 tested/held, 3 swept (SFP), 4 lost (ghost)
 const dTop = output("d_top", none), dBot = output("d_bot", none), dLive = output("d_live", none), dState = output("d_state", none);
 const sTop = output("s_top", none), sBot = output("s_bot", none), sLive = output("s_live", none), sState = output("s_state", none);
 box("demand_zone", { top: dTop, bottom: dBot, when: dLive, colorBy: dState, borderWidth: 1, borderStyle: "solid", opacity: 0.22,
   colors: ["#22c55e", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColors: ["#22c55e", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColorBy: dState });
 box("supply_zone", { top: sTop, bottom: sBot, when: sLive, colorBy: sState, borderWidth: 1, borderStyle: "solid", opacity: 0.22,
   colors: ["#ef4444", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColors: ["#ef4444", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColorBy: sState });
-
 const gBuy = output("g_buy", none), gSell = output("g_sell", none);
 box("neon_buy", { top: dTop, bottom: dBot, when: gBuy, color: "#00ffd5", opacity: 0.5, borderColor: "#00ffd5", borderWidth: 2, z: 5 });
 box("neon_sell", { top: sTop, bottom: sBot, when: gSell, color: "#ff2bd6", opacity: 0.5, borderColor: "#ff2bd6", borderWidth: 2, z: 5 });
-output("sig_buy", shape, overlay, { color: "#00ffd5", shape_where: "g_buy", shape: "triangle_up", location: "below_bar", glow: 8, description: "Buy reaction in a zone (neon teal)" });
-output("sig_sell", shape, overlay, { color: "#ff2bd6", shape_where: "g_sell", shape: "triangle_down", location: "above_bar", glow: 8, description: "Sell reaction in a zone (neon pink)" });
+output("sig_buy", shape, overlay, { color: "#00ffd5", shape_where: "g_buy", shape: "triangle_up", location: "below_bar", glow: 8, description: "Buy reaction in a zone" });
+output("sig_sell", shape, overlay, { color: "#ff2bd6", shape_where: "g_sell", shape: "triangle_down", location: "above_bar", glow: 8, description: "Sell reaction in a zone" });
 output("conf_buy", histogram, lower, { color: "#00ffd5", description: "Buy confluence score 1-100", format: "int" });
 output("conf_sell", histogram, lower, { color: "#ff2bd6", description: "Sell confluence score 1-100", format: "int" });
-
-output("poc_bar", scatter, overlay, { color: "#fbbf24", description: "POC of each bar (chart timeframe)" });
+output("poc_bar", scatter, overlay, { color: "#fbbf24", description: "POC of each bar" });
 output("poc_lvl", line, overlay, { color: "#f59e0b", width: 2, step: true, line_style: "dotted", description: "Developing POC level" });
-
 output("tl_res", line, overlay, { color: "#ef4444", width: 2, line_style: "dashed", description: "Descending 3-touch trendline" });
 output("tl_sup", line, overlay, { color: "#22c55e", width: 2, line_style: "dashed", description: "Ascending 3-touch trendline" });
 const gBU = output("g_brk_up", none), gBD = output("g_brk_dn", none), gRU = output("g_ret_up", none), gRD = output("g_ret_dn", none);
@@ -141,9 +122,8 @@ output("brk_up", shape, overlay, { color: "#16a34a", shape_where: "g_brk_up", sh
 output("brk_dn", shape, overlay, { color: "#dc2626", shape_where: "g_brk_dn", shape: "triangle_down", location: "above_bar", description: "Breakdown" });
 output("ret_up", shape, overlay, { color: "#0ea5e9", shape_where: "g_ret_up", location: "below_bar", description: "Retest of broken resistance" });
 output("ret_dn", shape, overlay, { color: "#f59e0b", shape_where: "g_ret_dn", location: "above_bar", description: "Retest of broken support" });
-output("brk_price", none, overlay, { description: "Exact break price (line value on the break bar)", format: "price" });
+output("brk_price", none, overlay, { description: "Exact break price", format: "price" });
 output("fake_rate", none, lower, { description: "Fake-break rate", format: "%" });
-
 output("vwap_d", line, overlay, { color: "#38bdf8", width: 1, description: "Daily VWAP (UTC)" });
 output("vwap_w", line, overlay, { color: "#f5a623", width: 2, description: "Weekly VWAP (UTC)" });
 output("vwap_m", line, overlay, { color: "#c084fc", width: 2, description: "Monthly VWAP (UTC)" });
@@ -153,60 +133,55 @@ output("ema_3", line, overlay, { color: "#f43f5e", width: 2, description: "EMA 1
 output("ema_4", line, overlay, { color: "#a855f7", width: 2, description: "EMA 360" });
 output("ema_5", line, overlay, { color: "#3b82f6", width: 2, description: "EMA 667" });
 output("ema_6", line, overlay, { color: "#e2e8f0", width: 3, description: "EMA 800" });
-
-// opens and EQs: thin dotted, exact price on the y axis
 output("open_d", line, overlay, { color: "#ffffff", width: 1, line_style: "dotted", axis_label: true, description: "Daily open (UTC)" });
-output("open_w", line, overlay, { color: "#ffffff", width: 1, line_style: "dotted", axis_label: true, description: "Weekly open (UTC, Monday)" });
+output("open_w", line, overlay, { color: "#ffffff", width: 1, line_style: "dotted", axis_label: true, description: "Weekly open (UTC)" });
 output("open_m", line, overlay, { color: "#ffffff", width: 1, line_style: "dotted", axis_label: true, description: "Monthly open (UTC)" });
-output("eq_prev", line, overlay, { color: "#39ff14", width: 1, line_style: "dotted", axis_label: true, description: "EQ of the previous day (neon green)" });
-output("eq_cur", line, overlay, { color: "#ff2bd6", width: 1, line_style: "dotted", axis_label: true, description: "EQ of the current day so far (neon pink)" });
-
-// SFP, double top/bottom, ABC
+output("eq_prev", line, overlay, { color: "#39ff14", width: 1, line_style: "dotted", axis_label: true, description: "EQ of the previous day" });
+output("eq_cur", line, overlay, { color: "#ff2bd6", width: 1, line_style: "dotted", axis_label: true, description: "EQ of the current day" });
 const gSfpBear = output("g_sfp_bear", none);
 const gSfpBull = output("g_sfp_bull", none);
 const gDt = output("g_dt", none);
 const gDb = output("g_db", none);
-const gAbc = output("g_abc", none);
-output("sfp_bear", shape, overlay, { color: "#f43f5e", shape_where: "g_sfp_bear", shape: "triangle_down", location: "above_bar", glow: 8, description: "Bearish SFP: swing high swept, close back below" });
-output("sfp_bull", shape, overlay, { color: "#22d3ee", shape_where: "g_sfp_bull", shape: "triangle_up", location: "below_bar", glow: 8, description: "Bullish SFP: swing low swept, close back above" });
-output("dbl_top", shape, overlay, { color: "#fb7185", shape_where: "g_dt", shape: "diamond", location: "above_bar", glow: 8, description: "HTF double top confirmed" });
-output("dbl_bot", shape, overlay, { color: "#4ade80", shape_where: "g_db", shape: "diamond", location: "below_bar", glow: 8, description: "HTF double bottom confirmed" });
-output("dbl_neck", none, overlay, { description: "Neckline price of the double top/bottom", format: "price" });
-output("abc_ratio", none, lower, { description: "AB length as percent of BC", format: "0" });
-output("abc_dir", none, lower, { description: "+1 when C is a low (bullish), -1 when C is a high (bearish)" });
-
-// harmonics + candle reversals
+const gManip = output("g_manip", none);
+const gAbcdBull = output("g_abcd_bull", none);
+const gAbcdBear = output("g_abcd_bear", none);
+output("sfp_bear", shape, overlay, { color: "#f43f5e", shape_where: "g_sfp_bear", shape: "triangle_down", location: "above_bar", glow: 8, description: "Bearish SFP" });
+output("sfp_bull", shape, overlay, { color: "#22d3ee", shape_where: "g_sfp_bull", shape: "triangle_up", location: "below_bar", glow: 8, description: "Bullish SFP" });
+output("dbl_top", shape, overlay, { color: "#fb7185", shape_where: "g_dt", shape: "diamond", location: "above_bar", glow: 8, description: "HTF double top" });
+output("dbl_bot", shape, overlay, { color: "#4ade80", shape_where: "g_db", shape: "diamond", location: "below_bar", glow: 8, description: "HTF double bottom" });
+output("dbl_neck", none, overlay, { description: "Neckline price", format: "price" });
+output("manip_ratio", none, lower, { description: "Manipulation: AB as percent of BC", format: "0" });
+output("abcd_cd", none, lower, { description: "ABCD: CD as percent of AB", format: "0" });
 const gR15 = output("g_r15", none);
 const gR60 = output("g_r60", none);
 const gBat = output("g_bat", none);
 const gFly = output("g_fly", none);
-output("pat_dir", none, overlay, { description: "+1 bullish, -1 bearish for the harmonic pattern that just finished" });
+output("pat_dir", none, overlay, { description: "+1 bullish, -1 bearish for the harmonic that just finished" });
 
-// ================= ALERTS (the first declared plays first when two rise together) =================
 alert("buy_reaction", { when: gBuy, message: "{{symbol}}: BUY reaction in demand zone at {{close}}", description: "Neon teal buy reaction" });
 alert("sell_reaction", { when: gSell, message: "{{symbol}}: SELL reaction in supply zone at {{close}}", description: "Neon pink sell reaction" });
-alert("sfp_bear", { when: gSfpBear, message: "{{symbol}}: BEARISH swing failure (SFP) at {{close}}", title: "SFP bearish", description: "Auction failed above a swing high" });
-alert("sfp_bull", { when: gSfpBull, message: "{{symbol}}: BULLISH swing failure (SFP) at {{close}}", title: "SFP bullish", description: "Auction failed below a swing low" });
-alert("butterfly", { when: gFly, message: "{{symbol}}: finished BUTTERFLY pattern ({{pat_dir}}) at {{close}}", title: "Butterfly", description: "A butterfly pattern completed at D" });
-alert("bat", { when: gBat, message: "{{symbol}}: finished BAT pattern ({{pat_dir}}) at {{close}}", title: "Bat", description: "A bat pattern completed at D" });
-alert("double_top", { when: gDt, message: "{{symbol}}: HTF DOUBLE TOP, neckline {{dbl_neck}}", title: "HTF double top", description: "Double top confirmed on the higher timeframe" });
-alert("double_bottom", { when: gDb, message: "{{symbol}}: HTF DOUBLE BOTTOM, neckline {{dbl_neck}}", title: "HTF double bottom", description: "Double bottom confirmed on the higher timeframe" });
-alert("abc", { when: gAbc, message: "{{symbol}}: ABC correction, AB is {{abc_ratio}}% of BC", title: "ABC correction", description: "AB is within the set percent of BC" });
-alert("rev_1h", { when: gR60, message: "{{symbol}}: 1h REVERSAL candle at {{close}}", title: "1h reversal candle", description: "1h doji / hammer / shooting star that fulfils the criteria" });
-alert("rev_15m", { when: gR15, message: "{{symbol}}: 15m REVERSAL candle at {{close}}", title: "15m reversal candle", description: "15m doji / hammer / shooting star that fulfils the criteria" });
+alert("sfp_bear_alert", { when: gSfpBear, message: "{{symbol}}: BEARISH SFP at {{close}}", title: "SFP bearish", description: "Auction failed above a swing high" });
+alert("sfp_bull_alert", { when: gSfpBull, message: "{{symbol}}: BULLISH SFP at {{close}}", title: "SFP bullish", description: "Auction failed below a swing low" });
+alert("butterfly", { when: gFly, message: "{{symbol}}: finished BUTTERFLY ({{pat_dir}}) at {{close}}", title: "Butterfly", description: "Butterfly completed at D" });
+alert("bat", { when: gBat, message: "{{symbol}}: finished BAT ({{pat_dir}}) at {{close}}", title: "Bat", description: "Bat completed at D" });
+alert("abcd_bull_alert", { when: gAbcdBull, message: "{{symbol}}: bullish ABCD completed at D, CD is {{abcd_cd}}% of AB", title: "ABCD bullish", description: "Bullish ABCD completed" });
+alert("abcd_bear_alert", { when: gAbcdBear, message: "{{symbol}}: bearish ABCD completed at D, CD is {{abcd_cd}}% of AB", title: "ABCD bearish", description: "Bearish ABCD completed" });
+alert("double_top", { when: gDt, message: "{{symbol}}: HTF DOUBLE TOP, neckline {{dbl_neck}}", title: "HTF double top", description: "Double top confirmed" });
+alert("double_bottom", { when: gDb, message: "{{symbol}}: HTF DOUBLE BOTTOM, neckline {{dbl_neck}}", title: "HTF double bottom", description: "Double bottom confirmed" });
+alert("manipulation", { when: gManip, message: "{{symbol}}: MANIPULATION, AB is {{manip_ratio}}% of BC", title: "Manipulation", description: "AB within the set percent of BC" });
+alert("rev_1h", { when: gR60, message: "{{symbol}}: 1h REVERSAL candle at {{close}}", title: "1h reversal candle", description: "1h doji / hammer / shooting star" });
+alert("rev_15m", { when: gR15, message: "{{symbol}}: 15m REVERSAL candle at {{close}}", title: "15m reversal candle", description: "15m doji / hammer / shooting star" });
 alert("breakout", { when: gBU, message: "{{symbol}}: trendline BREAKOUT at {{close}}", description: "Trendline breakout" });
 alert("breakdown", { when: gBD, message: "{{symbol}}: trendline BREAKDOWN at {{close}}", description: "Trendline breakdown" });
 alert("retest_up", { when: gRU, message: "{{symbol}}: retest of broken resistance at {{close}}", description: "Retest (long)" });
 alert("retest_dn", { when: gRD, message: "{{symbol}}: retest of broken support at {{close}}", description: "Retest (short)" });
 alert("zone_lost", { when: gLost, message: "{{symbol}}: zone lost at {{close}}", description: "A zone was lost" });
 
-// ================= HANDLES (declared once per kind) =================
 string("tag", { max_bytes: 48 });
 handles.label({ size: 12 });
 handles.box({ color: "#facc15", opacity: 0.18, borderWidth: 1 });
 handles.line({ color: "#ffffff", width: 1, line_style: "dotted", sticky_right: true, axis_label: "price" });
 handles.polyline({ width: 2 });
-
 const TEAL: i32 = rgba(0, 255, 213, 255);
 const PINK: i32 = rgba(255, 43, 214, 255);
 const YELLOW: i32 = rgba(250, 204, 21, 255);
@@ -216,28 +191,24 @@ const BAT: i32 = rgba(251, 146, 60, 255);
 function makeLabels(first: i32, count: i32): LabelHandle[] { const out: LabelHandle[] = []; for (let i = 0; i < count; i += 1) out.push(draw.label(first + i)); return out; }
 function makeBoxes(first: i32, count: i32): BoxHandle[] { const out: BoxHandle[] = []; for (let i = 0; i < count; i += 1) out.push(draw.box(first + i)); return out; }
 function makeLines(first: i32, count: i32): LineHandle[] { const out: LineHandle[] = []; for (let i = 0; i < count; i += 1) out.push(draw.line(first + i)); return out; }
-
-// score labels: ids 0-23
 const MAX_TAGS = 12;
 const buyTags = makeLabels(0, MAX_TAGS);
 const sellTags = makeLabels(MAX_TAGS, MAX_TAGS);
-// ABC: boxes 40-45, labels 50-67
 const RING = 6;
-const abcBoxes = makeBoxes(40, RING);
-const abcLabels = makeLabels(50, RING * 3);
-// HTF lines: 100-111, polyline 112
+const manBoxes = makeBoxes(40, RING);
+const manLabels = makeLabels(50, RING);
+const cdPolys: PolylineHandle[] = [draw.polyline(60), draw.polyline(61), draw.polyline(62), draw.polyline(63)];
+const cdLabels = makeLabels(70, 16);
+const cdBuf = new StaticArray<f64>(8);
 const NLINES = 12;
 const lines = makeLines(100, NLINES);
 const wpoly = draw.polyline(112);
-// harmonics + candle tags: 200-253
 const lab15 = makeLabels(200, 8);
 const lab60 = makeLabels(210, 8);
 const polys: PolylineHandle[] = [draw.polyline(220), draw.polyline(221), draw.polyline(222), draw.polyline(223)];
 const ptLabs = makeLabels(230, 20);
 const nameLabs = makeLabels(250, 4);
 
-// ================= STATE =================
-// shared
 let sw = new Swings(5, 5);
 let right: i32 = 5;
 let idx: i32 = 0;
@@ -245,7 +216,6 @@ let atr: f64 = NaN;
 let pClose: f64 = NaN;
 let lastT: f64 = NaN;
 let width: f64 = NaN;
-// zones + trendlines + score
 let nBuy: i32 = 0; let nSell: i32 = 0; let keepN: i32 = 4; let keepScore: f64 = 60.0;
 const MAXP = 200;
 const pocRing = new StaticArray<f64>(MAXP);
@@ -270,25 +240,25 @@ let uOn = false; let uBase: f64 = 0; let uSlope: f64 = 0; let uX0: i32 = 0;
 let rBrokeAt: i32 = -1; let rBrokeLvl: f64 = NaN; let rRetested = false;
 let uBrokeAt: i32 = -1; let uBrokeLvl: f64 = NaN; let uRetested = false;
 let breaks: i32 = 0; let fakes: i32 = 0;
-// SFP + double top + ABC
 const HR = 512;
 const hiRing = new StaticArray<f64>(HR);
 const loRing = new StaticArray<f64>(HR);
 let hs = new Swings(3, 3);
 let htfLen: i32 = 3; let htfSec: f64 = 14400.0;
-let enSfp = true; let enDbl = true; let enAbc = true;
+let enSfp = true; let enDbl = true; let enManip = true; let enAbcd = true;
 let sfpBars: i32 = 1; let sfpMin: f64 = 0.05;
 let dblTol: f64 = 0.3; let dblDepth: f64 = 0.8; let gapMin: i32 = 4; let gapMax: i32 = 60;
-let abcLo: f64 = 90.0; let abcHi: f64 = 110.0; let abcMin: f64 = 1.5;
+let manLo: f64 = 90.0; let manHi: f64 = 110.0; let manMin: f64 = 1.5;
+let rLo: f64 = 38.2; let rHi: f64 = 88.6; let cLo: f64 = 90.0; let cHi: f64 = 110.0; let cdMin: f64 = 1.5;
 let lvlH: f64 = NaN; let hActive = false; let hDone = false; let hStart: i32 = 0; let hExt: f64 = NaN;
 let lvlL: f64 = NaN; let lActive = false; let lDone = false; let lStart: i32 = 0; let lExt: f64 = NaN;
 let bucket: f64 = NaN; let curH: f64 = NaN; let curL: f64 = NaN; let htfCount: i32 = 0;
 let pH: f64 = NaN; let pHi: i32 = 0; let pL: f64 = NaN; let pLi: i32 = 0;
-let pa: f64 = NaN; let pb: f64 = NaN; let pc: f64 = NaN;
-let ta: f64 = NaN; let tb: f64 = NaN; let tc: f64 = NaN;
-let cHigh = false; let nPiv: i32 = 0; let abcN: i32 = 0;
-let abcFire = false; let abcRatio: f64 = NaN; let abcDir: f64 = NaN;
-// HTF levels
+let pa: f64 = NaN; let pb: f64 = NaN; let pc: f64 = NaN; let pd: f64 = NaN;
+let ta: f64 = NaN; let tb: f64 = NaN; let tc: f64 = NaN; let td: f64 = NaN;
+let cHigh = false; let nPiv: i32 = 0; let manN: i32 = 0; let cdN: i32 = 0;
+let manFire = false; let manRatio: f64 = NaN;
+let cdBull = false; let cdBear = false; let cdRatio: f64 = NaN;
 const NP = 32; const CR = 64;
 const pxs = new StaticArray<f64>(NP);
 const pts = new StaticArray<f64>(NP);
@@ -302,7 +272,6 @@ let week = new PeriodLevels("week");
 let month = new PeriodLevels("month");
 let shLevels = true; let shTrend = true; let shChan = true; let shPat = true;
 let shDo = true; let shWo = true; let shMo = true; let shPeq = true; let shCeq = true;
-// harmonics + candles
 const hx = new StaticArray<f64>(5);
 const ht = new StaticArray<f64>(5);
 const hk = new StaticArray<i32>(5);
@@ -319,44 +288,69 @@ class Tf {
 const s15 = new Tf();
 const s60 = new Tf();
 
-// ================= HELPERS =================
 function inBand(level: f64, lo: f64, hi: f64, tol: f64): bool {
   return !isNaN(level) && !isNaN(lo) && !isNaN(hi) && level >= lo - tol && level <= hi + tol;
 }
 
-function drawAbc(): void {
-  if (isNaN(ta) || isNaN(tb) || isNaN(tc)) return;
-  const top = Math.max(pa, Math.max(pb, pc));
-  const bot = Math.min(pa, Math.min(pb, pc));
-  const slot = abcN % RING;
-  abcN += 1;
-  abcBoxes[slot].set(ta, top, tc, bot);
-  sb_clear(); sb_text("A");
-  abcLabels[slot * 3].set(ta, pa).text(str_tag_sb).color(YELLOW);
-  sb_clear(); sb_text("B");
-  abcLabels[slot * 3 + 1].set(tb, pb).text(str_tag_sb).color(YELLOW);
-  sb_clear(); sb_text("C");
-  abcLabels[slot * 3 + 2].set(tc, pc).text(str_tag_sb).color(YELLOW);
+function drawManip(): void {
+  const top = Math.max(pb, Math.max(pc, pd));
+  const bot = Math.min(pb, Math.min(pc, pd));
+  const slot = manN % RING;
+  manN += 1;
+  manBoxes[slot].set(tb, top, td, bot);
+  sb_clear(); sb_text("MANIPULATION");
+  manLabels[slot].set(td, pd).text(str_tag_sb).color(YELLOW);
 }
 
-function pushPivot(price: f64, ts: f64, isHigh: bool, atrNow: f64): void {
+function drawAbcd(bull: bool): void {
+  const slot = cdN % 4;
+  cdN += 1;
+  cdBuf[0] = ta; cdBuf[1] = pa; cdBuf[2] = tb; cdBuf[3] = pb;
+  cdBuf[4] = tc; cdBuf[5] = pc; cdBuf[6] = td; cdBuf[7] = pd;
+  cdPolys[slot].setPoints(cdBuf, 4);
+  cdPolys[slot].width(2).color(bull ? TEAL : PINK);
+  const base = slot * 4;
+  sb_clear(); sb_text("A");
+  cdLabels[base].set(ta, pa).text(str_tag_sb).color(bull ? TEAL : PINK);
+  sb_clear(); sb_text("B");
+  cdLabels[base + 1].set(tb, pb).text(str_tag_sb).color(bull ? TEAL : PINK);
+  sb_clear(); sb_text("C");
+  cdLabels[base + 2].set(tc, pc).text(str_tag_sb).color(bull ? TEAL : PINK);
+  sb_clear(); sb_text(bull ? "D bullish" : "D bearish");
+  cdLabels[base + 3].set(td, pd).text(str_tag_sb).color(bull ? TEAL : PINK);
+}
+
+function pushPivot(px: f64, ts: f64, isHigh: bool, atrNow: f64): void {
   if (nPiv > 0 && cHigh == isHigh) {
-    if (isHigh) { if (price > pc) { pc = price; tc = ts; } }
-    else { if (price < pc) { pc = price; tc = ts; } }
+    if (isHigh) { if (px > pd) { pd = px; td = ts; } }
+    else { if (px < pd) { pd = px; td = ts; } }
     return;
   }
-  pa = pb; ta = tb; pb = pc; tb = tc; pc = price; tc = ts; cHigh = isHigh; nPiv += 1;
+  pa = pb; ta = tb; pb = pc; tb = tc; pc = pd; tc = td; pd = px; td = ts; cHigh = isHigh; nPiv += 1;
   if (nPiv < 3) return;
+  const mab = Math.abs(pc - pb);
+  const mbc = Math.abs(pd - pc);
+  if (mab > 0.0 && mbc > 0.0) {
+    const r = mab / mbc * 100.0;
+    if (r >= manLo && r <= manHi && mab >= manMin * atrNow && mbc >= manMin * atrNow) {
+      manFire = true; manRatio = r;
+      if (enManip) drawManip();
+    }
+  }
+  if (nPiv < 4) return;
   const ab = Math.abs(pb - pa);
   const bc = Math.abs(pc - pb);
-  if (bc <= 0.0 || ab <= 0.0) return;
-  const r = ab / bc * 100.0;
-  if (r >= abcLo && r <= abcHi && ab >= abcMin * atrNow && bc >= abcMin * atrNow) {
-    abcFire = true;
-    abcRatio = r;
-    abcDir = cHigh ? -1.0 : 1.0;
-    if (enAbc) drawAbc();
-  }
+  const cd = Math.abs(pd - pc);
+  if (ab <= 0.0 || ab < cdMin * atrNow) return;
+  const ret = bc / ab * 100.0;
+  const ext = cd / ab * 100.0;
+  if (ret < rLo || ret > rHi || ext < cLo || ext > cHi) return;
+  const bull = !cHigh && pd < pb && pc < pa;
+  const bear = cHigh && pd > pb && pc > pa;
+  if (!bull && !bear) return;
+  cdRatio = ext;
+  if (bull) cdBull = true; else cdBear = true;
+  if (enAbcd) drawAbcd(bull);
 }
 
 function addPivot(price: f64, time: f64, kind: i32): void {
@@ -410,7 +404,6 @@ function drawSlope(idMain: i32, idPar: i32, idMid: i32, ka: i32, kb: i32, isRes:
   } else { lines[idPar].delete(); lines[idMid].delete(); }
 }
 
-// 0 none, 1 doji bottom, 2 doji top, 3 hammer bottom, 4 shooting star top
 function judge(s: Tf, o: f64, h: f64, l: f64, c: f64): i32 {
   const range = h - l;
   let code = 0;
@@ -440,16 +433,12 @@ function judge(s: Tf, o: f64, h: f64, l: f64, c: f64): i32 {
   return code;
 }
 
-function nameOf(code: i32): string {
-  if (code == 1 || code == 2) return "Doji";
-  if (code == 3) return "Hammer";
-  return "Shooting star";
-}
-
-function tagCandle(hd: LabelHandle, tfName: string, code: i32, x: f64, hi: f64, lo: f64, atrNow: f64): void {
+function tagCandle(hd: LabelHandle, isHour: bool, code: i32, x: f64, hi: f64, lo: f64, atrNow: f64): void {
   const top = code == 2 || code == 4;
   sb_clear();
-  sb_text(tfName); sb_text(" "); sb_text(nameOf(code)); sb_text(top ? ": TOP REVERSAL" : ": BOTTOM REVERSAL");
+  sb_text(isHour ? "1h " : "15m ");
+  if (code == 1 || code == 2) sb_text("Doji"); else if (code == 3) sb_text("Hammer"); else sb_text("Shooting star");
+  sb_text(top ? ": TOP REVERSAL" : ": BOTTOM REVERSAL");
   if (top) hd.set(x, hi + 0.4 * atrNow).text(str_tag_sb).color(PINK);
   else hd.set(x, lo - 0.4 * atrNow).text(str_tag_sb).color(TEAL);
 }
@@ -463,9 +452,9 @@ function drawHarm(isFly: bool): void {
   for (let i = 0; i < 5; i++) { hbuf[2 * i] = ht[i]; hbuf[2 * i + 1] = hx[i]; }
   polys[slot].setPoints(hbuf, 5);
   polys[slot].width(2).color(isFly ? FLY : BAT);
-  const names = ["X", "A", "B", "C", "D"];
   for (let i = 0; i < 5; i++) {
-    sb_clear(); sb_text(names[i]);
+    sb_clear();
+    if (i == 0) sb_text("X"); else if (i == 1) sb_text("A"); else if (i == 2) sb_text("B"); else if (i == 3) sb_text("C"); else sb_text("D");
     ptLabs[slot * 5 + i].set(ht[i], hx[i]).text(str_tag_sb).color(isFly ? FLY : BAT);
   }
   sb_clear(); sb_text(isFly ? "BUTTERFLY " : "BAT "); sb_text(bull ? "bullish" : "bearish");
@@ -495,7 +484,6 @@ function pushHarm(price: f64, time: f64, kind: i32): void {
   else if (enFly && rcOk && projOk && inR(rB, 0.786, 0.786, fibTol) && inR(rD, 1.272, 1.618, fibTol)) { patFire = 2; patDir = dir; drawHarm(true); }
 }
 
-// ================= START =================
 function onStart(): void {
   right = i32(p_swing_len());
   sw = new Swings(right, right);
@@ -515,10 +503,11 @@ function onStart(): void {
   shZones = pb_show_zones(); shTl = pb_show_tl(); shPoc = pb_show_poc(); shSig = pb_show_sig();
   shVd = pb_show_vd(); shVw = pb_show_vw(); shVm = pb_show_vm();
   shE1 = pb_show_e1(); shE2 = pb_show_e2(); shE3 = pb_show_e3(); shE4 = pb_show_e4(); shE5 = pb_show_e5(); shE6 = pb_show_e6();
-  enSfp = pb_en_sfp(); enDbl = pb_en_dbl(); enAbc = pb_en_abc();
+  enSfp = pb_en_sfp(); enDbl = pb_en_dbl(); enManip = pb_en_manip(); enAbcd = pb_en_abcd();
   sfpBars = i32(p_sfp_bars()); sfpMin = p_sfp_min_atr();
   dblTol = p_dbl_tol(); dblDepth = p_dbl_depth(); gapMin = i32(p_dbl_gap_min()); gapMax = i32(p_dbl_gap_max());
-  abcLo = p_abc_lo(); abcHi = p_abc_hi(); abcMin = p_abc_min_atr();
+  manLo = p_manip_lo(); manHi = p_manip_hi(); manMin = p_manip_min_atr();
+  rLo = p_abcd_ret_lo(); rHi = p_abcd_ret_hi(); cLo = p_abcd_cd_lo(); cHi = p_abcd_cd_hi(); cdMin = p_abcd_min_atr();
   patPts = i32(p_pattern_pts());
   day = new PeriodLevels("day"); week = new PeriodLevels("week"); month = new PeriodLevels("month");
   shLevels = pb_show_levels(); shTrend = pb_show_trend(); shChan = pb_show_channel(); shPat = pb_show_pattern();
@@ -528,7 +517,6 @@ function onStart(): void {
   fibTol = p_fib_tol();
 }
 
-// ================= PER BAR =================
 function onBar(): void {
   const o = bar.open(), h = bar.high(), l = bar.low(), c = bar.close();
   const t = bar.time();
@@ -537,14 +525,13 @@ function onBar(): void {
   const tr = isNaN(pClose) ? h - l : Math.max(h - l, Math.max(Math.abs(h - pClose), Math.abs(l - pClose)));
   atr = isNaN(atr) ? tr : (atr * 13.0 + tr) / 14.0;
   sw.update(h, l);
-  abcFire = false; abcRatio = NaN; abcDir = NaN; patFire = 0; patDir = NaN;
+  manFire = false; manRatio = NaN; cdBull = false; cdBear = false; cdRatio = NaN; patFire = 0; patDir = NaN;
   const zd = p_zone_atr() * atr;
   const near = p_near_atr() * atr;
   const maxT = i32(p_max_touch());
   const sfpOk = p_allow_sfp() >= 1.0;
   let lost = 0.0;
 
-  // ---- zones
   if (sw.newLow()) { dT = sw.lastLow() + zd; dB = sw.lastLow(); dL = 1.0; dS = 0.0; dTouch = 0; dGhost = 0; }
   if (sw.newHigh()) { sT = sw.lastHigh(); sB = sw.lastHigh() - zd; sL = 1.0; sS = 0.0; sTouch = 0; sGhost = 0; }
   if (dL == 1.0 && dS < 4.0) {
@@ -560,7 +547,6 @@ function onBar(): void {
     else if (sB - c <= near && c < sB && sS < 2.0) { sS = 1.0; }
   } else if (sS == 4.0) { sGhost -= 1; if (sGhost <= 0) sL = 0.0; }
 
-  // ---- auto trendlines
   const tol = p_tl_tol() * atr;
   if (sw.newHigh()) {
     hp3 = hp2; hi3 = hi2; hp2 = hp1; hi2 = hi1; hp1 = sw.lastHigh(); hi1 = idx - right;
@@ -602,7 +588,6 @@ function onBar(): void {
     }
   }
 
-  // ---- VWAPs and EMAs
   const vol = bar.volume();
   const vdv = vD.update(o, h, l, c, vol, t);
   const vwv = vW.update(o, h, l, c, vol, t);
@@ -610,7 +595,6 @@ function onBar(): void {
   const v1 = e1.update(c); const v2 = e2.update(c); const v3 = e3.update(c);
   const v4 = e4.update(c); const v5 = e5.update(c); const v6 = e6.update(c);
 
-  // ---- POC from the chart's own volume profile
   let barPoc: f64 = NaN;
   let barPocVol: f64 = NaN;
   const pn = in_profile_cells();
@@ -632,7 +616,6 @@ function onBar(): void {
   }
   if (best < 0.0) pocLvl = NaN;
 
-  // ---- zone reactions + confluence score
   const range = h - l;
   const lowWick = Math.min(o, c) - l;
   const upWick = h - Math.max(o, c);
@@ -688,7 +671,6 @@ function onBar(): void {
     tg.set(t, h + 0.3 * atr).text(str_tag_sb).color(PINK);
   }
 
-  // ---- SFP: a confirmed swing level is swept by a wick and the close comes back inside
   let sfBear = 0.0; let sfBull = 0.0; let dtF = 0.0; let dbF = 0.0; let neck = NaN;
   if (sw.newHigh()) { lvlH = sw.lastHigh(); hActive = false; hDone = false; }
   if (sw.newLow()) { lvlL = sw.lastLow(); lActive = false; lDone = false; }
@@ -707,7 +689,6 @@ function onBar(): void {
     }
   }
 
-  // ---- HTF double top / bottom from folded closed candles (no repaint)
   const bk = Math.floor(t / htfSec);
   if (isNaN(bucket)) { bucket = bk; curH = h; curL = l; }
   else if (bk != bucket) {
@@ -742,12 +723,10 @@ function onBar(): void {
     if (l < curL) curL = l;
   }
 
-  // ---- ABC + harmonics share the confirmed chart-timeframe swings
   const tp = isNaN(width) ? NaN : t - width * f64(right);
   if (sw.newHigh()) { pushPivot(sw.lastHigh(), tp, true, atr); pushHarm(sw.lastHigh(), tp, 1); }
   if (sw.newLow()) { pushPivot(sw.lastLow(), tp, false, atr); pushHarm(sw.lastLow(), tp, -1); }
 
-  // ---- very high timeframe: weekly candles that arrived with this bar
   const nw = in_wk_cells();
   if (nw >= 6) {
     const wc = in_wk_view();
@@ -788,7 +767,6 @@ function onBar(): void {
     } else wpoly.delete();
   }
 
-  // ---- 15m and 1h reversal candles (closed candles only)
   let f15 = 0.0; let f60 = 0.0;
   const n1 = in_c15_cells();
   if (n1 >= 6) {
@@ -797,7 +775,7 @@ function onBar(): void {
       const code = judge(s15, cc[i + 1], cc[i + 2], cc[i + 3], cc[i + 4]);
       if (code > 0 && en15) {
         const slot = n15 % 8; n15 += 1;
-        tagCandle(lab15[slot], "15m", code, t + cc[i] / 1000.0, cc[i + 2], cc[i + 3], atr);
+        tagCandle(lab15[slot], false, code, t + cc[i] / 1000.0, cc[i + 2], cc[i + 3], atr);
         if (i + 6 >= n1) f15 = 1.0;
       }
     }
@@ -809,13 +787,12 @@ function onBar(): void {
       const code = judge(s60, c6[i + 1], c6[i + 2], c6[i + 3], c6[i + 4]);
       if (code > 0 && en60) {
         const slot = n60 % 8; n60 += 1;
-        tagCandle(lab60[slot], "1h", code, t + c6[i] / 1000.0, c6[i + 2], c6[i + 3], atr);
+        tagCandle(lab60[slot], true, code, t + c6[i] / 1000.0, c6[i + 2], c6[i + 3], atr);
         if (i + 6 >= n2) f60 = 1.0;
       }
     }
   }
 
-  // ================= WRITE OUTPUTS =================
   out_vwap_d(shVd ? vdv : NaN); out_vwap_w(shVw ? vwv : NaN); out_vwap_m(shVm ? vmv : NaN);
   out_ema_1(shE1 ? v1 : NaN); out_ema_2(shE2 ? v2 : NaN); out_ema_3(shE3 ? v3 : NaN);
   out_ema_4(shE4 ? v4 : NaN); out_ema_5(shE5 ? v5 : NaN); out_ema_6(shE6 ? v6 : NaN);
@@ -826,11 +803,9 @@ function onBar(): void {
   out_open_m(shMo ? month.open() : NaN);
   out_eq_prev(shPeq && !isNaN(pdHi) && !isNaN(pdLo) ? (pdHi + pdLo) * 0.5 : NaN);
   out_eq_cur(shCeq && !isNaN(dHi) && !isNaN(dLo) ? (dHi + dLo) * 0.5 : NaN);
-
   out_g_buy(fireBuy ? 1.0 : 0.0); out_g_sell(fireSell ? 1.0 : 0.0);
   out_sig_buy(l); out_sig_sell(h);
   out_conf_buy(fireBuy ? scoreBuy : NaN); out_conf_sell(fireSell ? scoreSell : NaN);
-
   out_d_top(dT); out_d_bot(dB); out_d_live(shZones ? dL : 0.0); out_d_state(dS);
   out_s_top(sT); out_s_bot(sB); out_s_live(shZones ? sL : 0.0); out_s_state(sS);
   out_tl_res(shTl && rOn ? rv : NaN);
@@ -841,21 +816,20 @@ function onBar(): void {
   out_g_zone_lost(shZones ? lost : 0.0);
   out_brk_price(shTl ? bp : NaN);
   out_fake_rate(shTl && breaks > 0 ? 100.0 * f64(fakes) / f64(breaks) : NaN);
-
   out_g_sfp_bear(enSfp ? sfBear : 0.0); out_g_sfp_bull(enSfp ? sfBull : 0.0);
   out_sfp_bear(h); out_sfp_bull(l);
   out_g_dt(enDbl ? dtF : 0.0); out_g_db(enDbl ? dbF : 0.0);
   out_dbl_top(h); out_dbl_bot(l);
   out_dbl_neck(enDbl ? neck : NaN);
-  out_g_abc(enAbc && abcFire ? 1.0 : 0.0);
-  out_abc_ratio(enAbc && abcFire ? abcRatio : NaN);
-  out_abc_dir(enAbc && abcFire ? abcDir : NaN);
-
+  out_g_manip(enManip && manFire ? 1.0 : 0.0);
+  out_manip_ratio(enManip && manFire ? manRatio : NaN);
+  out_g_abcd_bull(enAbcd && cdBull ? 1.0 : 0.0);
+  out_g_abcd_bear(enAbcd && cdBear ? 1.0 : 0.0);
+  out_abcd_cd(enAbcd && (cdBull || cdBear) ? cdRatio : NaN);
   out_g_r15(f15); out_g_r60(f60);
   out_g_bat(patFire == 1 ? 1.0 : 0.0);
   out_g_fly(patFire == 2 ? 1.0 : 0.0);
   out_pat_dir(patDir);
-
   pClose = c;
   idx += 1;
 }
