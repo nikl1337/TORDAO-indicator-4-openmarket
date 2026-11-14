@@ -1,10 +1,10 @@
 //@lang=wrun-ts
 // TORDAO INDICATOR 3 (file 6): candle patterns, trendline rays, trapped longs/shorts with delta,
-// confluence arrows at swing points, daily VWAP + EMA 21 touch alerts. Standalone: own swings, VWAP, EMA, opens, EQ.
-// UNTESTED until Run. Sound: Chart > Sounds in the indicator settings. Emoji arrows are the two constants below.
+// confluence arrows at swing points, daily VWAP + EMA 21 touch alerts.
+// Fixed: AS strict (no comma-const, no ++, no LabelHandle[] push).
 
-const ARROW_UP = "⬆️";
-const ARROW_DN = "👎";
+const ARROW_UP = "UP";
+const ARROW_DN = "DN";
 
 input("buy_vol", trades.volume, { side: "BUY", description: "Taker buy volume per bar, in coins" });
 input("sell_vol", trades.volume, { side: "SELL", description: "Taker sell volume per bar, in coins" });
@@ -62,7 +62,7 @@ output("mstar", shape, overlay, { color: "#39ff14", shape_where: "g_mstar", shap
 output("estar", shape, overlay, { color: "#ff2bd6", shape_where: "g_estar", shape: "diamond", location: "above_bar", glow: 10, description: "Evening star (top reversal)" });
 
 plot.rays({ name: "tl", slots: 2, colors: ["#ff2bd6", "#00ffd5"], width: 1.5, line_style: "solid", opacity: 0.9, words: ["Resistance ray", "Support ray"], tooltip: "{{word}}", panel: "overlay" });
-plot.spans({ name: "trap", slots: 2, colors: ["#ff2bd6", "#00ffd5"], opacity: 0.22, border: { width: 1, opacity: 0.9 }, words: ["Trapped longs", "Trapped shorts"], tooltip: "{{word}} {{bottom}} to {{top}}", panel: "overlay" });
+plot.spans({ name: "trap", slots: 2, colors: ["#ff2bd6", "#00ffd5"], opacity: 0.22, border: true, words: ["Trapped longs", "Trapped shorts"], tooltip: "{{word}} {{bottom}} to {{top}}", panel: "overlay" });
 plot.marks({ name: "dvw", slots: 1, size: { law: "sqrt", unit: 1, scale: 10 }, opacity_pct: 80, look: 0, text: { mode: 0 }, colors: ["#ff8c00", "#ff8c00"], tooltip: "Daily VWAP touched at {{price}}", panel: "overlay" });
 
 alert("dvwap_touch", { when: gDv, message: "{{symbol}}: daily VWAP touched or smashed at {{close}}", title: "Daily VWAP", description: "Price touched or crossed the daily VWAP (once per 15m candle)" });
@@ -73,12 +73,44 @@ handles.label({ size: 12 });
 const TEAL: i32 = rgba(0, 255, 213, 255);
 const PINK: i32 = rgba(255, 43, 214, 255);
 const GREEN: i32 = rgba(57, 255, 20, 255);
-function makeLabels(first: i32, count: i32): LabelHandle[] { const out: LabelHandle[] = []; for (let i = 0; i < count; i += 1) out.push(draw.label(first + i)); return out; }
-const trapHi = makeLabels(0, 8);
-const trapLo = makeLabels(8, 8);
-const confUp = makeLabels(20, 8);
-const confDn = makeLabels(28, 8);
-const starLab = makeLabels(40, 6);
+
+// labels: trap 0-15, conf 20-35, star 40-45
+const lab0 = draw.label(0); const lab1 = draw.label(1); const lab2 = draw.label(2); const lab3 = draw.label(3);
+const lab4 = draw.label(4); const lab5 = draw.label(5); const lab6 = draw.label(6); const lab7 = draw.label(7);
+const lab8 = draw.label(8); const lab9 = draw.label(9); const lab10 = draw.label(10); const lab11 = draw.label(11);
+const lab12 = draw.label(12); const lab13 = draw.label(13); const lab14 = draw.label(14); const lab15 = draw.label(15);
+const lab20 = draw.label(20); const lab21 = draw.label(21); const lab22 = draw.label(22); const lab23 = draw.label(23);
+const lab24 = draw.label(24); const lab25 = draw.label(25); const lab26 = draw.label(26); const lab27 = draw.label(27);
+const lab28 = draw.label(28); const lab29 = draw.label(29); const lab30 = draw.label(30); const lab31 = draw.label(31);
+const lab32 = draw.label(32); const lab33 = draw.label(33); const lab34 = draw.label(34); const lab35 = draw.label(35);
+const lab40 = draw.label(40); const lab41 = draw.label(41); const lab42 = draw.label(42);
+const lab43 = draw.label(43); const lab44 = draw.label(44); const lab45 = draw.label(45);
+
+function trapHiLab(i: i32): LabelHandle {
+  const k = i % 8;
+  if (k == 0) return lab0; if (k == 1) return lab1; if (k == 2) return lab2; if (k == 3) return lab3;
+  if (k == 4) return lab4; if (k == 5) return lab5; if (k == 6) return lab6; return lab7;
+}
+function trapLoLab(i: i32): LabelHandle {
+  const k = i % 8;
+  if (k == 0) return lab8; if (k == 1) return lab9; if (k == 2) return lab10; if (k == 3) return lab11;
+  if (k == 4) return lab12; if (k == 5) return lab13; if (k == 6) return lab14; return lab15;
+}
+function confUpLab(i: i32): LabelHandle {
+  const k = i % 8;
+  if (k == 0) return lab20; if (k == 1) return lab21; if (k == 2) return lab22; if (k == 3) return lab23;
+  if (k == 4) return lab24; if (k == 5) return lab25; if (k == 6) return lab26; return lab27;
+}
+function confDnLab(i: i32): LabelHandle {
+  const k = i % 8;
+  if (k == 0) return lab28; if (k == 1) return lab29; if (k == 2) return lab30; if (k == 3) return lab31;
+  if (k == 4) return lab32; if (k == 5) return lab33; if (k == 6) return lab34; return lab35;
+}
+function starLabAt(i: i32): LabelHandle {
+  const k = i % 6;
+  if (k == 0) return lab40; if (k == 1) return lab41; if (k == 2) return lab42;
+  if (k == 3) return lab43; if (k == 4) return lab44; return lab45;
+}
 
 const TR = 1024;
 const NL = 14;
@@ -147,7 +179,6 @@ function fmtDelta(v: f64): void {
   }
 }
 
-// one confirmed swing: confluence arrow, then trendline ray, then trapped box + delta
 function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64): void {
   const ps = pIdx % TR;
   const pt = aT[ps];
@@ -156,7 +187,7 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
     const lb = ps * NL;
     const tol = confTol * atrNow;
     let s = 0.0;
-    for (let i = 0; i < NL; i++) {
+    for (let i = 0; i < NL; i += 1) {
       const v = aLev[lb + i];
       if (!isNaN(v) && Math.abs(v - px) <= tol) {
         if (i < 3) s += wVwap; else if (i < 9) s += wEma; else if (i < 12) s += wOpen; else s += wEq;
@@ -169,11 +200,11 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
       sb_clear();
       if (isHigh) {
         sb_text(ARROW_DN); sb_text(" "); sb_int(i32(s));
-        confDn[nConfDn % 8].set(pt, px + 0.6 * atrNow).text(str_tag_sb).color(PINK);
+        confDnLab(nConfDn).set(pt, px + 0.6 * atrNow).text(str_tag_sb).color(PINK);
         nConfDn += 1;
       } else {
         sb_text(ARROW_UP); sb_text(" "); sb_int(i32(s));
-        confUp[nConfUp % 8].set(pt, px - 0.6 * atrNow).text(str_tag_sb).color(TEAL);
+        confUpLab(nConfUp).set(pt, px - 0.6 * atrNow).text(str_tag_sb).color(TEAL);
         nConfUp += 1;
       }
     }
@@ -183,7 +214,7 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
     if (hiIdx1 >= 0 && pIdx > hiIdx1 && pIdx - hiIdx1 <= tlLook && (!tlTrendOnly || px < hiPx1)) {
       const m = (px - hiPx1) / f64(pIdx - hiIdx1);
       let ok = true;
-      for (let k = hiIdx1 + 1; k <= idx; k++) {
+      for (let k = hiIdx1 + 1; k <= idx; k += 1) {
         if (aH[k % TR] > hiPx1 + m * f64(k - hiIdx1) + tlTol * atrNow) { ok = false; break; }
       }
       if (ok) {
@@ -196,7 +227,7 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
     if (loIdx1 >= 0 && pIdx > loIdx1 && pIdx - loIdx1 <= tlLook && (!tlTrendOnly || px > loPx1)) {
       const m = (px - loPx1) / f64(pIdx - loIdx1);
       let ok = true;
-      for (let k = loIdx1 + 1; k <= idx; k++) {
+      for (let k = loIdx1 + 1; k <= idx; k += 1) {
         if (aL[k % TR] < loPx1 + m * f64(k - loIdx1) - tlTol * atrNow) { ok = false; break; }
       }
       if (ok) {
@@ -212,7 +243,7 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
     const sp = trapSpan < right ? trapSpan : right;
     let k0 = pIdx - sp; if (k0 < 0) k0 = 0;
     let k1 = pIdx + sp; if (k1 > idx) k1 = idx;
-    for (let k = k0; k <= k1; k++) { dsum += aD[k % TR]; vsum += aV[k % TR]; }
+    for (let k = k0; k <= k1; k += 1) { dsum += aD[k % TR]; vsum += aV[k % TR]; }
     if (vsum > 0.0 && Math.abs(dsum) / vsum * 100.0 >= trapMin) {
       const mid = (aO[ps] + aC[ps]) * 0.5;
       if (isHigh && dsum > 0.0) {
@@ -220,14 +251,14 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
         if (px - bot < 0.3 * atrNow) bot = px - 0.3 * atrNow;
         out_trap_span_at(0, px, bot, pt, tNow, 0, 0, 0);
         sb_clear(); sb_text("Longs trapped, delta "); fmtDelta(dsum);
-        trapHi[nTrapHi % 8].set(pt, px + 0.3 * atrNow).text(str_tag_sb).color(PINK);
+        trapHiLab(nTrapHi).set(pt, px + 0.3 * atrNow).text(str_tag_sb).color(PINK);
         nTrapHi += 1;
       } else if (!isHigh && dsum < 0.0) {
         let top = mid;
         if (top - px < 0.3 * atrNow) top = px + 0.3 * atrNow;
         out_trap_span_at(1, top, px, pt, tNow, 1, 1, 0);
         sb_clear(); sb_text("Shorts trapped, delta "); fmtDelta(dsum);
-        trapLo[nTrapLo % 8].set(pt, px - 0.3 * atrNow).text(str_tag_sb).color(TEAL);
+        trapLoLab(nTrapLo).set(pt, px - 0.3 * atrNow).text(str_tag_sb).color(TEAL);
         nTrapLo += 1;
       }
     }
@@ -253,13 +284,15 @@ function onStart(): void {
 }
 
 function onBar(): void {
-  const o = bar.open(), h = bar.high(), l = bar.low(), c = bar.close();
+  const o = bar.open();
+  const h = bar.high();
+  const l = bar.low();
+  const c = bar.close();
   const t = bar.time();
   const vol = bar.volume();
   const tr = isNaN(pClose) ? h - l : Math.max(h - l, Math.max(Math.abs(h - pClose), Math.abs(l - pClose)));
   atr = isNaN(atr) ? tr : (atr * 13.0 + tr) / 14.0;
 
-  // ---- rings: price, time, delta
   const slot = idx % TR;
   aO[slot] = o; aH[slot] = h; aL[slot] = l; aC[slot] = c; aT[slot] = t;
   let bv = in_buy_vol(); let sv = in_sell_vol();
@@ -267,7 +300,6 @@ function onBar(): void {
   if (isNaN(sv)) sv = 0.0;
   aD[slot] = bv - sv; aV[slot] = bv + sv;
 
-  // ---- calendar: day / week (Monday) / month, UTC
   const dKey = i32(Math.floor(t / 86400.0));
   const wKey = i32(Math.floor((t - 345600.0) / 604800.0));
   const mKey = monthKeyOf(dKey);
@@ -282,23 +314,20 @@ function onBar(): void {
   const vD = dSumV > 0.0 ? dSumPV / dSumV : NaN;
   const vW = wSumV > 0.0 ? wSumPV / wSumV : NaN;
   const vM = mSumV > 0.0 ? mSumPV / mSumV : NaN;
-  if (!emaSeeded) { for (let i = 0; i < 6; i++) emaV[i] = c; emaSeeded = true; }
-  else { for (let i = 0; i < 6; i++) emaV[i] += emaK[i] * (c - emaV[i]); }
+  if (!emaSeeded) { for (let i = 0; i < 6; i += 1) emaV[i] = c; emaSeeded = true; }
+  else { for (let i = 0; i < 6; i += 1) emaV[i] += emaK[i] * (c - emaV[i]); }
 
-  // ---- level values of this bar, kept for the confluence check at a later pivot
   const lb = slot * NL;
   aLev[lb] = vD; aLev[lb + 1] = vW; aLev[lb + 2] = vM;
-  for (let i = 0; i < 6; i++) aLev[lb + 3 + i] = emaV[i];
+  for (let i = 0; i < 6; i += 1) aLev[lb + 3 + i] = emaV[i];
   aLev[lb + 9] = dayOpen; aLev[lb + 10] = weekOpen; aLev[lb + 11] = monOpen;
   aLev[lb + 12] = (isNaN(pdHi) || isNaN(pdLo)) ? NaN : (pdHi + pdLo) * 0.5;
   aLev[lb + 13] = (dayHi + dayLo) * 0.5;
 
-  // ---- swings -> confluence arrows, trendline rays, trapped boxes
   sw.update(h, l);
   if (sw.newHigh()) processPivot(true, sw.lastHigh(), idx - right, atr, t);
   if (sw.newLow()) processPivot(false, sw.lastLow(), idx - right, atr, t);
 
-  // ---- candle patterns on the chart timeframe
   let fHam = 0.0; let fShoot = 0.0; let fDoji = 0.0; let fMs = 0.0; let fEs = 0.0;
   const range = h - l;
   if (range > 0.0 && range >= candMinAtr * atr && idx > trendN + 2) {
@@ -326,14 +355,13 @@ function onBar(): void {
   }
   if (shStars && fMs == 1.0) {
     sb_clear(); sb_text("MORNING STAR");
-    starLab[nStar % 6].set(t, l - 0.5 * atr).text(str_tag_sb).color(GREEN); nStar += 1;
+    starLabAt(nStar).set(t, l - 0.5 * atr).text(str_tag_sb).color(GREEN); nStar += 1;
   }
   if (shStars && fEs == 1.0) {
     sb_clear(); sb_text("EVENING STAR");
-    starLab[nStar % 6].set(t, h + 0.5 * atr).text(str_tag_sb).color(PINK); nStar += 1;
+    starLabAt(nStar).set(t, h + 0.5 * atr).text(str_tag_sb).color(PINK); nStar += 1;
   }
 
-  // ---- daily VWAP touched or smashed: once per 15 minute candle
   let fDv = 0.0;
   if (!isNaN(vD) && l <= vD && h >= vD) {
     const b15 = i32(Math.floor(t / 900.0));
@@ -344,7 +372,6 @@ function onBar(): void {
     }
   }
 
-  // ---- EMA 1 (21) touched or smashed: fires when the touch begins
   const e21 = emaV[0];
   const eTouch = l <= e21 && h >= e21;
   const fE = (eTouch && !prevETouch && enEmaAlert && idx >= emaWarm) ? 1.0 : 0.0;
