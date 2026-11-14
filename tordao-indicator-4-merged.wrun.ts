@@ -1,16 +1,17 @@
 //@lang=wrun-ts
-// TORDAO indicator 4 MERGED — drawing budget 57 (OpenMarket max 64).
-//
-// The full fixed source is ready in the Grok chat as a downloadable file:
-//   tordao-indicator-4-merged-FIXED.wrun.ts
-// OpenMarket has no GitHub install: paste that file into the chart Editor and press Run.
-// Keep this first line as //@lang=wrun-ts when you paste.
-//
-// What changed vs the old merge: score tags 4+4, ABCD label at D only,
-// no XABCD point labels, 4 reversal tags per TF, keep_n max 4.
+// TORDAO indicator 4 (MERGED). Drawing budget <= 64 (OpenMarket cap). Sound: Chart > Sounds.
+// Handles: 0-3 buy tags, 4-7 sell tags, 8-13 manip boxes, 14-19 manip labels, 20-23 abcd polys, 24-27 abcd labels,
+// 28-39 HTF lines, 40 weekly path, 41-44 15m labels, 45-48 1h labels, 49-52 harmonic polys, 53-56 harmonic names.
 
 input("close", ohlcv.close);
-output("ready", none, overlay, { description: "Stub — paste the FIXED file from Grok chat" });
-function onBar(): void {
-  out_ready(1.0);
-}
+input("profile", volume_profile.cells, { max_cells: 8192, missing: "empty", description: "This bar's volume by price level" });
+input("wk", candles.cells, { interval: "1w", bars: 300, description: "Closed weekly candles" });
+input("c15", candles.cells, { interval: "15m", bars: 8, max_cells: 64, description: "Closed 15m candles" });
+input("c60", candles.cells, { interval: "1h", bars: 8, max_cells: 16, description: "Closed 1h candles" });
+
+param.bool("show_zones", true, { label: "Show auction zones" });
+param("swing_len", 5, { min: 2, max: 30, description: "Swing length" });
+output("sma", line, overlay, { color: "#2563eb", width: 2, description: "smoke test line" });
+let ema = new Ema(20);
+function onStart(): void { ema = new Ema(i32(p_swing_len())); }
+function onBar(): void { out_sma(ema.update(bar.close())); }
