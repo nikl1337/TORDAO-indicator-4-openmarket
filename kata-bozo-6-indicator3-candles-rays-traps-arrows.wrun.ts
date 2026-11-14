@@ -1,7 +1,7 @@
 //@lang=wrun-ts
 // TORDAO INDICATOR 3 (file 6): candle patterns, trendline rays, trapped longs/shorts with delta,
 // confluence arrows at swing points, daily VWAP + EMA 21 touch alerts.
-// Fixed: AS strict (no comma-const, no ++, no LabelHandle[] push).
+// Fixed: AS strict + plot.spans border object literal.
 
 const ARROW_UP = "UP";
 const ARROW_DN = "DN";
@@ -62,7 +62,7 @@ output("mstar", shape, overlay, { color: "#39ff14", shape_where: "g_mstar", shap
 output("estar", shape, overlay, { color: "#ff2bd6", shape_where: "g_estar", shape: "diamond", location: "above_bar", glow: 10, description: "Evening star (top reversal)" });
 
 plot.rays({ name: "tl", slots: 2, colors: ["#ff2bd6", "#00ffd5"], width: 1.5, line_style: "solid", opacity: 0.9, words: ["Resistance ray", "Support ray"], tooltip: "{{word}}", panel: "overlay" });
-plot.spans({ name: "trap", slots: 2, colors: ["#ff2bd6", "#00ffd5"], opacity: 0.22, border: true, words: ["Trapped longs", "Trapped shorts"], tooltip: "{{word}} {{bottom}} to {{top}}", panel: "overlay" });
+plot.spans({ name: "trap", slots: 2, colors: ["#ff2bd6", "#00ffd5"], opacity: 0.22, border: { width: 1, opacity: 0.9 }, words: ["Trapped longs", "Trapped shorts"], tooltip: "{{word}} {{bottom}} to {{top}}", panel: "overlay" });
 plot.marks({ name: "dvw", slots: 1, size: { law: "sqrt", unit: 1, scale: 10 }, opacity_pct: 80, look: 0, text: { mode: 0 }, colors: ["#ff8c00", "#ff8c00"], tooltip: "Daily VWAP touched at {{price}}", panel: "overlay" });
 
 alert("dvwap_touch", { when: gDv, message: "{{symbol}}: daily VWAP touched or smashed at {{close}}", title: "Daily VWAP", description: "Price touched or crossed the daily VWAP (once per 15m candle)" });
@@ -74,7 +74,6 @@ const TEAL: i32 = rgba(0, 255, 213, 255);
 const PINK: i32 = rgba(255, 43, 214, 255);
 const GREEN: i32 = rgba(57, 255, 20, 255);
 
-// labels: trap 0-15, conf 20-35, star 40-45
 const lab0 = draw.label(0); const lab1 = draw.label(1); const lab2 = draw.label(2); const lab3 = draw.label(3);
 const lab4 = draw.label(4); const lab5 = draw.label(5); const lab6 = draw.label(6); const lab7 = draw.label(7);
 const lab8 = draw.label(8); const lab9 = draw.label(9); const lab10 = draw.label(10); const lab11 = draw.label(11);
@@ -182,7 +181,6 @@ function fmtDelta(v: f64): void {
 function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64): void {
   const ps = pIdx % TR;
   const pt = aT[ps];
-
   if (shConf) {
     const lb = ps * NL;
     const tol = confTol * atrNow;
@@ -209,7 +207,6 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
       }
     }
   }
-
   if (isHigh) {
     if (hiIdx1 >= 0 && pIdx > hiIdx1 && pIdx - hiIdx1 <= tlLook && (!tlTrendOnly || px < hiPx1)) {
       const m = (px - hiPx1) / f64(pIdx - hiIdx1);
@@ -237,7 +234,6 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
     }
     loIdx1 = pIdx; loPx1 = px;
   }
-
   if (shTraps) {
     let dsum = 0.0; let vsum = 0.0;
     const sp = trapSpan < right ? trapSpan : right;
