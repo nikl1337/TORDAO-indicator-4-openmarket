@@ -1,7 +1,6 @@
 //@lang=wrun-ts
-// TORDAO companion (novaadd) — key levels, turn rays, manip rectangles,
-// pivot circles, liquidity-grab attention marks.
-// Second indicator beside final-approved-by-openmarket.wrun.ts
+// TORDAO companion (novaadd) — key levels (red above / green below + y-axis names),
+// turn rays, manip rectangles, pivot circles, liquidity-grab attention marks.
 
 input("close", ohlcv.close);
 
@@ -14,7 +13,7 @@ param.bool("en_liq", true, { label: "Liquidity grab attention marks" });
 
 page("Logic");
 param("swing_len", 5, { min: 2, max: 30, description: "Swing length" });
-param("level_n", 6, { min: 2, max: 12, description: "How many key levels to keep" });
+param("level_n", 6, { min: 2, max: 8, description: "How many key levels to keep" });
 param("liq_bars", 2, { min: 1, max: 8, description: "Bars allowed to reclaim after grab" });
 param("liq_min_atr", 0.08, { min: 0, max: 2, description: "Min sweep depth in ATR" });
 param("manip_lo", 90, { min: 50, max: 100, description: "Manip: AB min % of BC" });
@@ -26,11 +25,11 @@ const gLiqBull = output("g_liq_bull", none);
 const gLiqBear = output("g_liq_bear", none);
 output("liq_bull", shape, overlay, {
   color: "#00ffd5", shape_where: "g_liq_bull", shape: "diamond",
-  location: "below_bar", glow: 14, description: "Liquidity grab bull (sweep low + reclaim)"
+  location: "below_bar", glow: 14, description: "Liquidity grab bull"
 });
 output("liq_bear", shape, overlay, {
   color: "#ff2bd6", shape_where: "g_liq_bear", shape: "diamond",
-  location: "above_bar", glow: 14, description: "Liquidity grab bear (sweep high + reclaim)"
+  location: "above_bar", glow: 14, description: "Liquidity grab bear"
 });
 
 const gPivUp = output("g_piv_up", none);
@@ -42,18 +41,6 @@ output("piv_up", shape, overlay, {
 output("piv_dn", shape, overlay, {
   color: "#c084fc", shape_where: "g_piv_dn", shape: "circle",
   location: "above_bar", glow: 8, description: "Clear downward pivot move"
-});
-
-plot.rays({
-  name: "key_lvls",
-  slots: 8,
-  colors: ["#ef4444", "#f87171", "#fb7185", "#fca5a5", "#22c55e", "#4ade80", "#86efac", "#bbf7d0"],
-  width: 1,
-  line_style: "dotted",
-  opacity: 0.9,
-  words: ["R1", "R2", "R3", "R4", "S1", "S2", "S3", "S4"],
-  tooltip: "{{word}} {{y1}}",
-  panel: "overlay"
 });
 
 plot.rays({
@@ -84,11 +71,29 @@ alert("liq_bear_alert", { when: gLiqBear, message: "{{symbol}}: LIQUIDITY GRAB B
 alert("piv_up_alert", { when: gPivUp, message: "{{symbol}}: clear pivot move UP", description: "Clear up pivot" });
 alert("piv_dn_alert", { when: gPivDn, message: "{{symbol}}: clear pivot move DOWN", description: "Clear down pivot" });
 
+handles.line({
+  width: 1,
+  line_style: "dotted",
+  extend: "right",
+  sticky_right: true,
+  axis_label: "price"
+});
+const RED: i32 = rgba(239, 68, 68, 255);
+const GREEN: i32 = rgba(34, 197, 94, 255);
+const NLV = 8;
+function makeLines(first: i32, count: i32): LineHandle[] {
+  const out: LineHandle[] = [];
+  for (let i = 0; i < count; i += 1) out.push(draw.line(first + i));
+  return out;
+}
+const lvlLines = makeLines(0, NLV);
+
 let sw = new Swings(5, 5);
 let right: i32 = 5;
 let idx: i32 = 0;
 let atr: f64 = NaN;
 let pClose: f64 = NaN;
+let t: f64 = NaN;
 let enLevels = true;
 let enRays = true;
 let enManip = true;
@@ -120,16 +125,17 @@ let li0: i32 = 0; let li1: i32 = 0; let li2: i32 = 0;
 let prevH: f64 = NaN;
 let prevL: f64 = NaN;
 
-const resLvl = new StaticArray<f64>(8);
-const supLvl = new StaticArray<f64>(8);
-let nRes: i32 = 0;
-let nSup: i32 = 0;
+const keyPx = new StaticArray<f64>(NLV);
+const keyT0 = new StaticArray<f64>(NLV);
+let keyN: i32 = 0;
+let keyCur: i32 = 0;
 
 function onStart(): void {
   right = i32(p_swing_len());
   sw = new Swings(right, right);
   levelN = i32(p_level_n());
-  if (levelN > 8) levelN = 8;
+  if (levelN > NLV) levelN = NLV;
+  if (levelN < 2) levelN = 2;
   liqBars = i32(p_liq_bars());
   liqMin = p_liq_min_atr();
   manipLo = p_manip_lo();
@@ -143,14 +149,38 @@ function onStart(): void {
   enLiq = pb_en_liq();
 }
 
-function pushRes(px: f64): void {
-  if (nRes < 8) { resLvl[nRes] = px; nRes += 1; }
-  else { for (let i = 0; i < 7; i += 1) resLvl[i] = resLvl[i + 1]; resLvl[7] = px; }
+function pushLevel(px: f64, t0: f64): void {
+  for (let i = 0; i < keyN; i += 1) {
+    if (!isNaN(keyPx[i]) && Math.abs(keyPx[i] - px) <= 0.05 * atr) return;
+  }
+  if (keyN < levelN) {
+    keyPx[keyN] = px;
+    keyT0[keyN] = t0;
+    keyN += 1;
+  } else {
+    keyPx[keyCur] = px;
+    keyT0[keyCur] = t0;
+    keyCur = (keyCur + 1) % levelN;
+  }
 }
 
-function pushSup(px: f64): void {
-  if (nSup < 8) { supLvl[nSup] = px; nSup += 1; }
-  else { for (let i = 0; i < 7; i += 1) supLvl[i] = supLvl[i + 1]; supLvl[7] = px; }
+function paintLevels(price: f64, tNow: f64): void {
+  if (!enLevels) {
+    for (let i = 0; i < NLV; i += 1) lvlLines[i].delete();
+    return;
+  }
+  const n = keyN < levelN ? keyN : levelN;
+  for (let i = 0; i < NLV; i += 1) {
+    if (i < n && !isNaN(keyPx[i])) {
+      const y = keyPx[i];
+      const t0 = keyT0[i];
+      lvlLines[i].set(t0, y, tNow, y);
+      if (y > price) lvlLines[i].color(RED);
+      else lvlLines[i].color(GREEN);
+    } else {
+      lvlLines[i].delete();
+    }
+  }
 }
 
 function onBar(): void {
@@ -158,6 +188,7 @@ function onBar(): void {
   const h = bar.high();
   const l = bar.low();
   const c = bar.close();
+  t = bar.time();
   const tr = isNaN(pClose) ? h - l : Math.max(h - l, Math.max(Math.abs(h - pClose), Math.abs(l - pClose)));
   atr = isNaN(atr) ? tr : (atr * 13.0 + tr) / 14.0;
   sw.update(h, l);
@@ -207,42 +238,26 @@ function onBar(): void {
   if (newHigh) {
     h2 = h1; hi2 = hi1; h1 = h0; hi1 = hi0;
     h0 = sw.lastHigh(); hi0 = idx - right;
-    pushRes(h0);
     if (!isNaN(prevH) && h0 - prevH >= pivMin * atr) pivDn = 1.0;
     if (!isNaN(l0) && h0 - l0 >= pivMin * atr) pivUp = 1.0;
     prevH = h0;
-
-    if (enLevels) {
-      const slot = nRes > 0 ? (nRes - 1) % 4 : 0;
-      out_key_lvls_ray(slot, h0, h0, 0, slot, 1, 1);
-    }
-    if (enRays && !isNaN(h1) && h0 < h1 && hi0 > hi1) {
-      out_turns_ray(0, h1, h0, hi0 - hi1, 0, 1, 1);
-    }
-    if (enRays && !isNaN(h2) && h0 < h2 && hi0 > hi2) {
-      out_turns_ray(1, h2, h0, hi0 - hi2, 1, 1, 1);
-    }
+    pushLevel(h0, t);
+    if (enRays && !isNaN(h1) && h0 < h1 && hi0 > hi1) out_turns_ray(0, h1, h0, hi0 - hi1, 0, 1, 1);
+    if (enRays && !isNaN(h2) && h0 < h2 && hi0 > hi2) out_turns_ray(1, h2, h0, hi0 - hi2, 1, 1, 1);
   }
 
   if (newLow) {
     l2 = l1; li2 = li1; l1 = l0; li1 = li0;
     l0 = sw.lastLow(); li0 = idx - right;
-    pushSup(l0);
     if (!isNaN(prevL) && prevL - l0 >= pivMin * atr) pivUp = 1.0;
     if (!isNaN(h0) && h0 - l0 >= pivMin * atr) pivDn = 1.0;
     prevL = l0;
-
-    if (enLevels) {
-      const slot = 4 + (nSup > 0 ? (nSup - 1) % 4 : 0);
-      out_key_lvls_ray(slot, l0, l0, 0, slot, 1, 1);
-    }
-    if (enRays && !isNaN(l1) && l0 > l1 && li0 > li1) {
-      out_turns_ray(2, l1, l0, li0 - li1, 2, 1, 1);
-    }
-    if (enRays && !isNaN(l2) && l0 > l2 && li0 > li2) {
-      out_turns_ray(3, l2, l0, li0 - li2, 3, 1, 1);
-    }
+    pushLevel(l0, t);
+    if (enRays && !isNaN(l1) && l0 > l1 && li0 > li1) out_turns_ray(2, l1, l0, li0 - li1, 2, 1, 1);
+    if (enRays && !isNaN(l2) && l0 > l2 && li0 > li2) out_turns_ray(3, l2, l0, li0 - li2, 3, 1, 1);
   }
+
+  paintLevels(c, t);
 
   if (enManip && !isNaN(h0) && !isNaN(l0) && !isNaN(h1) && !isNaN(l1)) {
     const top = Math.max(h0, h1);
@@ -253,8 +268,7 @@ function onBar(): void {
       if (ab > 0.0 && bc > 0.0 && ab >= manipMin * atr) {
         const pct = ab / bc * 100.0;
         if (pct >= manipLo && pct <= manipHi) {
-          const bars = Math.max(1, Math.abs(hi0 - li2));
-          out_manip_span(0, top, bot, bars, 0, 0, 0);
+          out_manip_span(0, top, bot, Math.max(1, Math.abs(hi0 - li2)), 0, 0, 0);
         }
       }
     }
@@ -264,8 +278,7 @@ function onBar(): void {
       if (ab2 > 0.0 && bc2 > 0.0 && ab2 >= manipMin * atr) {
         const pct2 = ab2 / bc2 * 100.0;
         if (pct2 >= manipLo && pct2 <= manipHi) {
-          const bars2 = Math.max(1, Math.abs(li0 - hi2));
-          out_manip_span(1, Math.max(h0, h1), Math.min(l0, l1), bars2, 1, 0, 0);
+          out_manip_span(1, Math.max(h0, h1), Math.min(l0, l1), Math.max(1, Math.abs(li0 - hi2)), 1, 0, 0);
         }
       }
     }
