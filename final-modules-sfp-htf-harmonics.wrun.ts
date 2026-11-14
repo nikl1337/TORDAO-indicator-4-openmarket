@@ -1,6 +1,6 @@
 //@lang=wrun-ts
-// TORDAO companion — harmonics, ABCD, same-length, fib hits (0.382 / 0.667 / 0.882 + more),
-// key levels red/green + axis, liq grabs, pivot circles.
+// TORDAO companion — harmonics, ABCD, same-length, fib hits, targets (1.618),
+// teal bull / pink bear projections, orange Fib/Gann centers, key levels, liq grabs.
 
 input("close", ohlcv.close);
 
@@ -10,6 +10,8 @@ param.bool("en_harm", true, { label: "Harmonics + ABCD + same-length" });
 param.bool("en_fib", true, { label: "Fibonacci exact-hit markers" });
 param.bool("en_liq", true, { label: "Liquidity grab marks" });
 param.bool("en_pivots", true, { label: "Clear pivot circles" });
+param.bool("en_targets", true, { label: "Fib price targets (1.618 focus)" });
+param.bool("en_gann", true, { label: "Fib/Gann center dots" });
 
 page("Logic");
 param("swing_len", 5, { min: 2, max: 30, description: "Swing length" });
@@ -22,6 +24,7 @@ param("fib_tol", 0.35, { min: 0.05, max: 2, description: "Fib hit tol in ATR" })
 param("liq_bars", 2, { min: 1, max: 8, description: "Liq reclaim bars" });
 param("liq_min_atr", 0.08, { min: 0, max: 2, description: "Liq min sweep ATR" });
 param("pivot_min_atr", 0.8, { min: 0.1, max: 10, description: "Clear pivot min ATR" });
+param("tgt_ext", 1.618, { min: 1.0, max: 4.0, description: "Primary target extension (1.618)" });
 
 const gLiqBull = output("g_liq_bull", none);
 const gLiqBear = output("g_liq_bear", none);
@@ -59,6 +62,23 @@ output("fib667", shape, overlay, { color: "#ca8a04", shape_where: "g_fib667", sh
 output("fib786", shape, overlay, { color: "#a16207", shape_where: "g_fib786", shape: "square", location: "below_bar", glow: 12, description: "0.786 hit" });
 output("fib882", shape, overlay, { color: "#f97316", shape_where: "g_fib882", shape: "square", location: "below_bar", glow: 14, description: "0.882 hit" });
 
+const gGann = output("g_gann", none);
+output("gann_dot", shape, overlay, {
+  color: "#fb923c", shape_where: "g_gann", shape: "circle",
+  location: "below_bar", glow: 16, description: "Fib/Gann center"
+});
+
+output("tgt_1272", line, overlay, { color: "#2dd4bf", width: 1, step: true, line_style: "dotted", description: "Target 1.272" });
+output("tgt_1414", line, overlay, { color: "#14b8a6", width: 1, step: true, line_style: "dotted", description: "Target 1.414" });
+output("tgt_1618", line, overlay, { color: "#00ffd5", width: 2, step: true, line_style: "solid", description: "Target 1.618 (primary)" });
+output("tgt_2000", line, overlay, { color: "#5eead4", width: 1, step: true, line_style: "dotted", description: "Target 2.0" });
+output("tgt_2618", line, overlay, { color: "#99f6e4", width: 1, step: true, line_style: "dotted", description: "Target 2.618" });
+output("tgtb_1272", line, overlay, { color: "#f9a8d4", width: 1, step: true, line_style: "dotted", description: "Bear target 1.272" });
+output("tgtb_1414", line, overlay, { color: "#f472b6", width: 1, step: true, line_style: "dotted", description: "Bear target 1.414" });
+output("tgtb_1618", line, overlay, { color: "#ff2bd6", width: 2, step: true, line_style: "solid", description: "Bear target 1.618 (primary)" });
+output("tgtb_2000", line, overlay, { color: "#e879f9", width: 1, step: true, line_style: "dotted", description: "Bear target 2.0" });
+output("tgtb_2618", line, overlay, { color: "#d946ef", width: 1, step: true, line_style: "dotted", description: "Bear target 2.618" });
+
 alert("liq_bull_alert", { when: gLiqBull, message: "{{symbol}}: LIQ GRAB BULL", description: "Liq bull" });
 alert("liq_bear_alert", { when: gLiqBear, message: "{{symbol}}: LIQ GRAB BEAR", description: "Liq bear" });
 alert("abcd_bull", { when: gAbcdB, message: "{{symbol}}: ABCD bull D", description: "ABCD bull" });
@@ -70,6 +90,7 @@ alert("same_len", { when: gSame, message: "{{symbol}}: same-length move", descri
 alert("fib_382", { when: gFib382, message: "{{symbol}}: Fib 0.382", description: "0.382" });
 alert("fib_667", { when: gFib667, message: "{{symbol}}: Fib 0.667", description: "0.667" });
 alert("fib_882", { when: gFib882, message: "{{symbol}}: Fib 0.882", description: "0.882" });
+alert("gann_center", { when: gGann, message: "{{symbol}}: Fib/Gann center", description: "Gann/fib center" });
 
 handles.polyline({ width: 2 });
 const polyAbcdB = draw.polyline(8);
@@ -133,6 +154,9 @@ let enHarm = true;
 let enFib = true;
 let enLiq = true;
 let enPivots = true;
+let enTargets = true;
+let enGann = true;
+let tgtExt: f64 = 1.618;
 
 let lvlH: f64 = NaN; let hActive = false; let hDone = false; let hStart: i32 = 0; let hExt: f64 = NaN;
 let lvlL: f64 = NaN; let lActive = false; let lDone = false; let lStart: i32 = 0; let lExt: f64 = NaN;
@@ -146,15 +170,20 @@ let keyCur: i32 = 0;
 let legA: f64 = NaN;
 let legB: f64 = NaN;
 let legIsUp = false;
+let bullTgt = false;
+let bearTgt = false;
+let t1272: f64 = NaN;
+let t1414: f64 = NaN;
+let t1618: f64 = NaN;
+let t2000: f64 = NaN;
+let t2618: f64 = NaN;
 
 function inR(v: f64, lo: f64, hi: f64, tol: f64): bool {
   return v >= lo - tol && v <= hi + tol;
 }
-
 function drawPoly(poly: PolylineHandle, n: i32): void {
   poly.setPoints(pbuf, n);
 }
-
 function pushPivot(price: f64, ts: f64, isHigh: bool): void {
   const k: i32 = isHigh ? 1 : -1;
   if (nP > 0 && pk[nP - 1] == k) {
@@ -186,11 +215,14 @@ function onStart(): void {
   liqBars = i32(p_liq_bars());
   liqMin = p_liq_min_atr();
   pivMin = p_pivot_min_atr();
+  tgtExt = p_tgt_ext();
   enLevels = pb_en_levels();
   enHarm = pb_en_harm();
   enFib = pb_en_fib();
   enLiq = pb_en_liq();
   enPivots = pb_en_pivots();
+  enTargets = pb_en_targets();
+  enGann = pb_en_gann();
 }
 
 function pushLevel(price: f64, t0: f64): void {
@@ -247,6 +279,7 @@ function onBar(): void {
   let showPat = false;
   let showFib = false;
   let showFib2 = false;
+  let gannFire = 0.0;
 
   if (sw.newHigh()) {
     lvlH = sw.lastHigh(); hActive = false; hDone = false; hExt = NaN; newHigh = true;
@@ -312,8 +345,7 @@ function onBar(): void {
         else if (fi == 4) r = 0.786;
         else if (fi == 5) r = 0.882;
         const y = legIsUp ? legB - span * r : legB + span * r;
-        const touched = l <= y && h >= y;
-        if (touched) {
+        if (l <= y && h >= y) {
           const near = Math.min(Math.abs(c - y), Math.min(Math.abs(h - y), Math.abs(l - y)));
           if (near <= tol) {
             if (fi == 0) { f382 = 1.0; fibLabelY = y; showFib = true; }
@@ -341,28 +373,21 @@ function onBar(): void {
         const fly = inR(AB, 70.0, 88.6, tol) && inR(AD, 120.0, 161.8, tol);
         const gart = inR(AB, 56.0, 68.0, tol) && inR(AD, 74.0, 84.0, tol);
         if (bat || fly || gart) {
-          pbuf[0] = tX; pbuf[1] = X;
-          pbuf[2] = tA; pbuf[3] = A;
-          pbuf[4] = tB; pbuf[5] = B;
-          pbuf[6] = tC; pbuf[7] = C;
-          pbuf[8] = tD; pbuf[9] = D;
+          pbuf[0] = tX; pbuf[1] = X; pbuf[2] = tA; pbuf[3] = A; pbuf[4] = tB; pbuf[5] = B;
+          pbuf[6] = tC; pbuf[7] = C; pbuf[8] = tD; pbuf[9] = D;
           if (bat) { batFire = true; drawPoly(polyBat, 5); }
           if (fly) { flyFire = true; drawPoly(polyFly, 5); }
           if (gart) { gartFire = true; drawPoly(polyGart, 5); }
-          showPat = true;
-          labelY = D;
+          showPat = true; labelY = D;
           sb_clear();
           if (bat) sb_text("BAT ");
           if (fly) sb_text("BUTTERFLY ");
           if (gart) sb_text("GARTLEY ");
-          sb_text("AD ");
-          sb_f64(AD, 1);
-          sb_text("%");
+          sb_text("AD "); sb_f64(AD, 1); sb_text("%");
           str_pat_txt_sb();
         }
       }
     }
-
     if (nP >= 4) {
       const A = px[nP - 4]; const B = px[nP - 3]; const C = px[nP - 2]; const D = px[nP - 1];
       const tA = pt[nP - 4]; const tB = pt[nP - 3]; const tC = pt[nP - 2]; const tD = pt[nP - 1];
@@ -376,39 +401,61 @@ function onBar(): void {
           const bull = pk[nP - 1] == -1 && D < B;
           const bear = pk[nP - 1] == 1 && D > B;
           if (bull || bear) {
-            pbuf[0] = tA; pbuf[1] = A;
-            pbuf[2] = tB; pbuf[3] = B;
-            pbuf[4] = tC; pbuf[5] = C;
-            pbuf[6] = tD; pbuf[7] = D;
-            if (bull) { abcdB = true; drawPoly(polyAbcdB, 4); }
-            else { abcdS = true; drawPoly(polyAbcdS, 4); }
-            showPat = true;
-            labelY = D;
+            pbuf[0] = tA; pbuf[1] = A; pbuf[2] = tB; pbuf[3] = B; pbuf[4] = tC; pbuf[5] = C; pbuf[6] = tD; pbuf[7] = D;
+            if (bull) { abcdB = true; drawPoly(polyAbcdB, 4); } else { abcdS = true; drawPoly(polyAbcdS, 4); }
+            showPat = true; labelY = D;
             sb_clear();
             sb_text(bull ? "ABCD bull " : "ABCD bear ");
-            sb_text("CD ");
-            sb_f64(ext, 0);
-            sb_text("% AB");
+            sb_text("CD "); sb_f64(ext, 0); sb_text("% AB");
             str_pat_txt_sb();
           }
         }
         if (Math.abs(cd - ab) / ab * 100.0 <= sameTol) {
-          pbuf[0] = tA; pbuf[1] = A;
-          pbuf[2] = tB; pbuf[3] = B;
-          pbuf[4] = tC; pbuf[5] = C;
-          pbuf[6] = tD; pbuf[7] = D;
-          sameFire = true;
-          drawPoly(polySame, 4);
+          pbuf[0] = tA; pbuf[1] = A; pbuf[2] = tB; pbuf[3] = B; pbuf[4] = tC; pbuf[5] = C; pbuf[6] = tD; pbuf[7] = D;
+          sameFire = true; drawPoly(polySame, 4);
           if (!showPat) {
-            showPat = true;
-            labelY = D;
-            sb_clear();
-            sb_text("SAME LEN ");
-            sb_f64(cd / ab * 100.0, 0);
-            sb_text("%");
+            showPat = true; labelY = D;
+            sb_clear(); sb_text("SAME LEN "); sb_f64(cd / ab * 100.0, 0); sb_text("%");
             str_pat_txt_sb();
           }
         }
+      }
+    }
+  }
+
+  // measured fib targets — analyst confluence, 1.618 primary (teal bull / pink bear)
+  if (enTargets && !isNaN(legA) && !isNaN(legB)) {
+    const span = Math.abs(legB - legA);
+    if (span > 0.0) {
+      if (legIsUp) {
+        bullTgt = true; bearTgt = false;
+        t1272 = legB + span * 1.272;
+        t1414 = legB + span * 1.414;
+        t1618 = legB + span * (tgtExt > 0.0 ? tgtExt : 1.618);
+        t2000 = legB + span * 2.0;
+        t2618 = legB + span * 2.618;
+      } else {
+        bullTgt = false; bearTgt = true;
+        t1272 = legB - span * 1.272;
+        t1414 = legB - span * 1.414;
+        t1618 = legB - span * (tgtExt > 0.0 ? tgtExt : 1.618);
+        t2000 = legB - span * 2.0;
+        t2618 = legB - span * 2.618;
+      }
+    }
+  }
+
+  // Fib/Gann center = midpoint of impulse (0.5) — big orange dot
+  if (enGann && !isNaN(legA) && !isNaN(legB) && !isNaN(atr) && atr > 0.0) {
+    const mid = (legA + legB) / 2.0;
+    const tolG = fibTol * atr;
+    if (l <= mid && h >= mid) {
+      const near = Math.min(Math.abs(c - mid), Math.min(Math.abs(h - mid), Math.abs(l - mid)));
+      if (near <= tolG) {
+        gannFire = 1.0;
+        f5 = 1.0;
+        fibLabelY = mid;
+        showFib = true;
       }
     }
   }
@@ -456,6 +503,20 @@ function onBar(): void {
   out_g_fib786(enFib ? f786 : 0.0);
   out_g_fib882(enFib ? f882 : 0.0);
   out_fib382(l); out_fib5(l); out_fib618(l); out_fib667(l); out_fib786(l); out_fib882(l);
+
+  out_g_gann(enGann ? gannFire : 0.0);
+  out_gann_dot(enGann && gannFire == 1.0 ? ((legA + legB) / 2.0) : l);
+
+  if (enTargets && bullTgt) {
+    out_tgt_1272(t1272); out_tgt_1414(t1414); out_tgt_1618(t1618); out_tgt_2000(t2000); out_tgt_2618(t2618);
+    out_tgtb_1272(NaN); out_tgtb_1414(NaN); out_tgtb_1618(NaN); out_tgtb_2000(NaN); out_tgtb_2618(NaN);
+  } else if (enTargets && bearTgt) {
+    out_tgt_1272(NaN); out_tgt_1414(NaN); out_tgt_1618(NaN); out_tgt_2000(NaN); out_tgt_2618(NaN);
+    out_tgtb_1272(t1272); out_tgtb_1414(t1414); out_tgtb_1618(t1618); out_tgtb_2000(t2000); out_tgtb_2618(t2618);
+  } else {
+    out_tgt_1272(NaN); out_tgt_1414(NaN); out_tgt_1618(NaN); out_tgt_2000(NaN); out_tgt_2618(NaN);
+    out_tgtb_1272(NaN); out_tgtb_1414(NaN); out_tgtb_1618(NaN); out_tgtb_2000(NaN); out_tgtb_2618(NaN);
+  }
 
   pClose = c;
   idx += 1;
