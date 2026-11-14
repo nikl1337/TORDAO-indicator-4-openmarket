@@ -1,59 +1,59 @@
 # TORDAO indicator 4 — OpenMarket (wrun)
 
-**Status:** Core file runs on OpenMarket (browser indicator).
+**Status:** Core + companion run on OpenMarket (browser indicators).
 
-## Install (OpenMarket has no GitHub one-click install)
+## Install
 
-1. Open a chart on [openmarket.xyz](https://openmarket.xyz) (signed in).
-2. Toolbar → **Editor**.
-3. **New indicator** → **Blank indicator**.
-4. Keep line 1 as: `//@lang=wrun-ts`
-5. Open this file on GitHub → **Raw** → select all → copy:
+OpenMarket has **no GitHub one-click install**. Paste into the chart Editor.
+
+### 1) Core
+
+1. Chart → **Editor** → **New indicator** → **Blank**
+2. Keep `//@lang=wrun-ts`
+3. Raw → copy all → paste:
    - [`final-approved-by-openmarket.wrun.ts`](./final-approved-by-openmarket.wrun.ts)
-6. Paste under line 1 in the editor (if a second `//@lang=wrun-ts` appears, delete the duplicate).
-7. Press **Run**.
+4. **Run**
 
-You should see auction zones, EMA ribbon, VWAPs, POC, trendlines, and zone reaction marks.
+Zones, EMA ribbon, VWAP, POC, core trendlines, confluence.
 
-## Companion modules (optional second indicator)
+### 2) Companion (novaadd)
 
-File: [`final-modules-sfp-htf-harmonics.wrun.ts`](./final-modules-sfp-htf-harmonics.wrun.ts)
+Second Blank tab, same steps, file:
 
-Add as a **second** Blank indicator (same chart), paste, Run. Uses only **4 polylines**.
+- [`final-modules-sfp-htf-harmonics.wrun.ts`](./final-modules-sfp-htf-harmonics.wrun.ts)
 
-Includes:
+Raw: https://raw.githubusercontent.com/nikl1337/TORDAO-indicator-4-openmarket/main/final-modules-sfp-htf-harmonics.wrun.ts
 
-- Swing failure patterns (SFP)
-- HTF double top / bottom + neckline
-- ABCD completion (shape + polyline)
-- Bat / butterfly (shape + polyline)
-- Daily / weekly / monthly open + previous/current day EQ
+## Companion features (toggles under Modules)
 
-Toggles under **Modules** in settings.
+| Module | What it draws |
+|---|---|
+| SFP | Bull/bear swing failure triangles |
+| HTF double | Double top/bottom diamonds + neckline |
+| ABCD | Completion shapes + polylines |
+| Bat / butterfly | Harmonic marks + polylines |
+| Opens / EQ | Day/week/month open, prev/current day EQ |
+| **2+2 auto trendlines** | 2 resistance + 2 support on extreme pivots |
+| **1h + 4h order blocks** | Bull/bear OB boxes (solid 1h, dashed 4h) |
+| **Reverse squares** | Yellow/orange **squares** = probable reverse |
+| **Breakout circles** | Blue/purple **circles** = probable breakout / continuation |
 
-## What the core file is
+### Mark logic (short)
 
-Single-file **core** TORDAO for OpenMarket wrun-ts:
+- **Square (reverse):** SFP, ABCD/bat/fly completion, double top/bottom, rejection at live order block  
+- **Circle (breakout/continue):** Close through a trendline or through an order block  
 
-- Auction demand / supply zones (state ladder)
-- Auto trendlines + break / retest marks
-- Daily / weekly / monthly VWAP
-- EMA ribbon (21 / 50 / 144 / 360 / 667 / 800)
-- Bar POC + developing POC (volume profile cells)
-- Neon zone reactions + confluence score histograms
-- Alerts for break, retest, zone lost, buy/sell reaction
+Handles: **4 polylines** only (under the 64 cap).
 
-Drawing budget stays under OpenMarket’s 64-handle limit.
-
-## Bug fixes included
+## Bug fixes (history)
 
 | Issue | Fix |
 |---|---|
 | Handle not bound | One `const x = output(...)` per line |
-| `vpPoc` missing | Local helpers |
+| `vpPoc` missing | Local helpers in core |
 | `++` / `--` | `+= 1` / `-= 1` |
-| Plain `param` + `when` | Removed |
-| Paste truncated | Compact core (~18KB) |
+| Polyline API | `setPoints(buffer, pointCount)` |
+| Paste truncated | Keep files compact |
 
 ## License
 
