@@ -1,7 +1,7 @@
 //@lang=wrun-ts
 // TORDAO modules companion: SFP, HTF double top/bottom, ABCD, opens/EQ, bat/butterfly.
 // Run as a SECOND indicator beside final-approved-by-openmarket.wrun.ts.
-// Handles: 4 polylines only (under OpenMarket 64 cap).
+// Handles: 4 polylines only. Polyline API: setPoints(buffer, pointCount).
 
 input("close", ohlcv.close);
 
@@ -150,11 +150,8 @@ function inR(v: f64, lo: f64, hi: f64, tol: f64): bool {
 }
 
 function drawPoly(poly: PolylineHandle, n: i32): void {
-  poly.clear();
-  for (let i = 0; i < n; i += 1) {
-    poly.add(pbuf[i * 2], pbuf[i * 2 + 1]);
-  }
-  poly.commit();
+  // n = number of points; pbuf is flat x0,y0,x1,y1,...
+  poly.setPoints(pbuf, n);
 }
 
 function pushPivot(px: f64, ts: f64, isHigh: bool): void {
