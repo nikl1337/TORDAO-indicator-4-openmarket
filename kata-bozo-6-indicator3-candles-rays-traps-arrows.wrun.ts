@@ -1,10 +1,7 @@
 //@lang=wrun-ts
-// TORDAO INDICATOR 3 (file 6): candle patterns, trendline rays, trapped longs/shorts with delta,
-// confluence arrows at swing points, daily VWAP + EMA 21 touch alerts.
-// Fixed: AS strict + plot.spans border object literal.
-
-const ARROW_UP = "UP";
-const ARROW_DN = "DN";
+// TORDAO INDICATOR 3: candles, trendline rays, trapped zones (+20% pad),
+// confluence circles (red top / green bottom), daily VWAP + EMA 21.
+// Swing length default 3. No emoji arrows.
 
 input("buy_vol", trades.volume, { side: "BUY", description: "Taker buy volume per bar, in coins" });
 input("sell_vol", trades.volume, { side: "SELL", description: "Taker sell volume per bar, in coins" });
@@ -13,13 +10,13 @@ param.bool("show_candles", true, { label: "Highlight hammer, shooting star, doji
 param.bool("show_stars", true, { label: "Highlight morning star and evening star" });
 param.bool("show_trend", true, { label: "Auto trendline rays (never disappear)" });
 param.bool("show_traps", true, { label: "Trapped longs / shorts boxes with delta" });
-param.bool("show_conf", true, { label: "Confluence arrows at swing points" });
+param.bool("show_conf", true, { label: "Confluence circles at swing points" });
 param.bool("show_dvwap_dot", true, { label: "Orange dot when daily VWAP is touched or smashed" });
 param.bool("show_lines", true, { label: "Show daily VWAP and EMA 21 lines" });
 param.bool("en_dvwap_alert", true, { label: "Alert: daily VWAP touched or smashed (once per 15m candle)" });
 param.bool("en_ema21_alert", true, { label: "Alert: EMA 21 touched or smashed" });
 param.bool("tl_trend_only", true, { label: "Trendlines: only falling resistance and rising support" });
-param.int("swing_len", 5, { min: 2, max: 30, label: "Swing length (bars each side)" });
+param.int("swing_len", 3, { min: 2, max: 30, label: "Swing length (bars each side)" });
 param.int("tl_lookback", 600, { min: 50, max: 900, label: "Trendlines: max bars between the two anchor swings" });
 param.number("tl_tol", 0.1, { min: 0, max: 1, step: 0.05, label: "Trendlines: tolerance in ATR when checking the line was not violated" });
 param.number("doji_pct", 10, { min: 1, max: 30, step: 1, label: "Doji: body at most this percent of the range" });
@@ -29,15 +26,16 @@ param.number("cand_min_atr", 0.5, { min: 0, max: 3, step: 0.1, label: "Candles: 
 param.int("trend_n", 5, { min: 2, max: 12, label: "Candles: prior trend lookback in bars" });
 param.number("star_small", 30, { min: 5, max: 80, step: 1, label: "Stars: middle body at most this percent of the first body" });
 param.number("star_depth", 50, { min: 20, max: 100, step: 1, label: "Stars: third candle closes this percent into the first body" });
-param.int("trap_span", 1, { min: 0, max: 2, label: "Traps: bars each side of the swing used for the delta" });
-param.number("trap_min_pct", 10, { min: 1, max: 80, step: 1, label: "Traps: min |delta| as percent of the volume in that window" });
-param.number("conf_tol", 0.35, { min: 0.05, max: 3, step: 0.05, label: "Confluence: level within this many ATR of the pivot" });
-param.number("conf_min", 50, { min: 1, max: 100, step: 1, label: "Confluence: min score for an arrow" });
-param.number("w_vwap", 12, { min: 0, max: 100, step: 1, label: "Weight: each VWAP (daily, weekly, monthly)" });
-param.number("w_ema", 8, { min: 0, max: 100, step: 1, label: "Weight: each EMA" });
-param.number("w_open", 8, { min: 0, max: 100, step: 1, label: "Weight: each open (daily, weekly, monthly)" });
-param.number("w_eq", 6, { min: 0, max: 100, step: 1, label: "Weight: each daily EQ (previous, current)" });
-param.number("w_tl", 14, { min: 0, max: 100, step: 1, label: "Weight: a trendline ray at the pivot" });
+param.int("trap_span", 1, { min: 0, max: 2, label: "Traps: bars each side of the swing used for the delta", when: "show_traps" });
+param.number("trap_min_pct", 10, { min: 1, max: 80, step: 1, label: "Traps: min |delta| as percent of the volume in that window", when: "show_traps" });
+param.number("zone_pad", 20, { min: 0, max: 50, step: 1, label: "Trap zones: extra height percent", when: "show_traps" });
+param.number("conf_tol", 0.35, { min: 0.05, max: 3, step: 0.05, label: "Confluence: level within this many ATR of the pivot", when: "show_conf" });
+param.number("conf_min", 50, { min: 1, max: 100, step: 1, label: "Confluence: min score for a circle", when: "show_conf" });
+param.number("w_vwap", 12, { min: 0, max: 100, step: 1, label: "Weight: each VWAP (daily, weekly, monthly)", when: "show_conf" });
+param.number("w_ema", 8, { min: 0, max: 100, step: 1, label: "Weight: each EMA", when: "show_conf" });
+param.number("w_open", 8, { min: 0, max: 100, step: 1, label: "Weight: each open (daily, weekly, monthly)", when: "show_conf" });
+param.number("w_eq", 6, { min: 0, max: 100, step: 1, label: "Weight: each daily EQ (previous, current)", when: "show_conf" });
+param.number("w_tl", 14, { min: 0, max: 100, step: 1, label: "Weight: a trendline ray at the pivot", when: "show_conf" });
 param.number("dot_qty", 6, { min: 1, max: 16, step: 1, label: "Orange dot size (1 small, 16 huge)" });
 param.int("ema1", 21, { min: 2, max: 2000, label: "EMA 1 length (touch alert uses this one)" });
 param.int("ema2", 50, { min: 2, max: 2000, label: "EMA 2 length" });
@@ -55,11 +53,15 @@ const gShoot = output("g_shoot", none);
 const gDoji = output("g_doji", none);
 const gMs = output("g_mstar", none);
 const gEs = output("g_estar", none);
+const gTop = output("g_cyc_top", none);
+const gBot = output("g_cyc_bot", none);
 output("hammer", shape, overlay, { color: "#00ffd5", shape_where: "g_hammer", shape: "triangle_up", location: "below_bar", glow: 8, description: "Hammer (bottom)" });
 output("shooting", shape, overlay, { color: "#ff2bd6", shape_where: "g_shoot", shape: "triangle_down", location: "above_bar", glow: 8, description: "Shooting star (top)" });
 output("doji", shape, overlay, { color: "#ffffff", shape_where: "g_doji", shape: "diamond", location: "above_bar", glow: 8, description: "Doji" });
 output("mstar", shape, overlay, { color: "#39ff14", shape_where: "g_mstar", shape: "diamond", location: "below_bar", glow: 10, description: "Morning star (bottom reversal)" });
 output("estar", shape, overlay, { color: "#ff2bd6", shape_where: "g_estar", shape: "diamond", location: "above_bar", glow: 10, description: "Evening star (top reversal)" });
+output("cyc_top", shape, overlay, { color: "#ef4444", shape_where: "g_cyc_top", shape: "circle", location: "above_bar", glow: 16, description: "Possible top reversal (red circle)" });
+output("cyc_bot", shape, overlay, { color: "#22c55e", shape_where: "g_cyc_bot", shape: "circle", location: "below_bar", glow: 16, description: "Possible bottom reversal (green circle)" });
 
 plot.rays({ name: "tl", slots: 2, colors: ["#ff2bd6", "#00ffd5"], width: 1.5, line_style: "solid", opacity: 0.9, words: ["Resistance ray", "Support ray"], tooltip: "{{word}}", panel: "overlay" });
 plot.spans({ name: "trap", slots: 2, colors: ["#ff2bd6", "#00ffd5"], opacity: 0.22, border: { width: 1, opacity: 0.9 }, words: ["Trapped longs", "Trapped shorts"], tooltip: "{{word}} {{bottom}} to {{top}}", panel: "overlay" });
@@ -67,12 +69,16 @@ plot.marks({ name: "dvw", slots: 1, size: { law: "sqrt", unit: 1, scale: 10 }, o
 
 alert("dvwap_touch", { when: gDv, message: "{{symbol}}: daily VWAP touched or smashed at {{close}}", title: "Daily VWAP", description: "Price touched or crossed the daily VWAP (once per 15m candle)" });
 alert("ema21_touch", { when: gE21, message: "{{symbol}}: EMA 21 touched or smashed at {{close}}", title: "EMA 21", description: "Price touched or crossed the EMA 21 of the chart timeframe" });
+alert("cyc_top_alert", { when: gTop, message: "{{symbol}}: possible TOP reversal", title: "Top circle", description: "Red circle: confluence swing high" });
+alert("cyc_bot_alert", { when: gBot, message: "{{symbol}}: possible BOTTOM reversal", title: "Bottom circle", description: "Green circle: confluence swing low" });
 
 string("tag", { max_bytes: 48 });
 handles.label({ size: 12 });
 const TEAL: i32 = rgba(0, 255, 213, 255);
 const PINK: i32 = rgba(255, 43, 214, 255);
-const GREEN: i32 = rgba(57, 255, 20, 255);
+const GREEN: i32 = rgba(34, 197, 94, 255);
+const RED: i32 = rgba(239, 68, 68, 255);
+const STAR: i32 = rgba(57, 255, 20, 255);
 
 const lab0 = draw.label(0); const lab1 = draw.label(1); const lab2 = draw.label(2); const lab3 = draw.label(3);
 const lab4 = draw.label(4); const lab5 = draw.label(5); const lab6 = draw.label(6); const lab7 = draw.label(7);
@@ -124,8 +130,8 @@ const aLev = new StaticArray<f64>(14336);
 const emaV = new StaticArray<f64>(6);
 const emaK = new StaticArray<f64>(6);
 
-let sw = new Swings(5, 5);
-let right: i32 = 5;
+let sw = new Swings(3, 3);
+let right: i32 = 3;
 let idx: i32 = 0;
 let atr: f64 = NaN;
 let pClose: f64 = NaN;
@@ -146,10 +152,12 @@ let enDvAlert = true; let enEmaAlert = true; let tlTrendOnly = true;
 let tlLook: i32 = 600; let tlTol: f64 = 0.1;
 let dojiPct: f64 = 10.0; let wickMult: f64 = 2.0; let smallWick: f64 = 15.0; let candMinAtr: f64 = 0.5; let trendN: i32 = 5;
 let starSmall: f64 = 30.0; let starDepth: f64 = 50.0;
-let trapSpan: i32 = 1; let trapMin: f64 = 10.0;
+let trapSpan: i32 = 1; let trapMin: f64 = 10.0; let zonePad: f64 = 20.0;
 let confTol: f64 = 0.35; let confMin: f64 = 50.0;
 let wVwap: f64 = 12.0; let wEma: f64 = 8.0; let wOpen: f64 = 8.0; let wEq: f64 = 6.0; let wTl: f64 = 14.0;
 let dotQty: f64 = 6.0;
+let cycTop = 0.0;
+let cycBot = 0.0;
 
 function monthKeyOf(days: i32): i32 {
   const z: i32 = days + 719468;
@@ -196,13 +204,14 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
     if (s > 100.0) s = 100.0;
     if (s >= confMin) {
       sb_clear();
+      sb_int(i32(s));
       if (isHigh) {
-        sb_text(ARROW_DN); sb_text(" "); sb_int(i32(s));
-        confDnLab(nConfDn).set(pt, px + 0.6 * atrNow).text(str_tag_sb).color(PINK);
+        cycTop = 1.0;
+        confDnLab(nConfDn).set(pt, px + 0.7 * atrNow).text(str_tag_sb).color(RED);
         nConfDn += 1;
       } else {
-        sb_text(ARROW_UP); sb_text(" "); sb_int(i32(s));
-        confUpLab(nConfUp).set(pt, px - 0.6 * atrNow).text(str_tag_sb).color(TEAL);
+        cycBot = 1.0;
+        confUpLab(nConfUp).set(pt, px - 0.7 * atrNow).text(str_tag_sb).color(GREEN);
         nConfUp += 1;
       }
     }
@@ -242,19 +251,22 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
     for (let k = k0; k <= k1; k += 1) { dsum += aD[k % TR]; vsum += aV[k % TR]; }
     if (vsum > 0.0 && Math.abs(dsum) / vsum * 100.0 >= trapMin) {
       const mid = (aO[ps] + aC[ps]) * 0.5;
+      const frac = zonePad / 100.0;
       if (isHigh && dsum > 0.0) {
         let bot = mid;
         if (px - bot < 0.3 * atrNow) bot = px - 0.3 * atrNow;
-        out_trap_span_at(0, px, bot, pt, tNow, 0, 0, 0);
+        const pad = (px - bot) * frac;
+        out_trap_span_at(0, px + pad, bot - pad, pt, tNow, 0, 0, 0);
         sb_clear(); sb_text("Longs trapped, delta "); fmtDelta(dsum);
-        trapHiLab(nTrapHi).set(pt, px + 0.3 * atrNow).text(str_tag_sb).color(PINK);
+        trapHiLab(nTrapHi).set(pt, px + pad + 0.3 * atrNow).text(str_tag_sb).color(PINK);
         nTrapHi += 1;
       } else if (!isHigh && dsum < 0.0) {
         let top = mid;
         if (top - px < 0.3 * atrNow) top = px + 0.3 * atrNow;
-        out_trap_span_at(1, top, px, pt, tNow, 1, 1, 0);
+        const pad = (top - px) * frac;
+        out_trap_span_at(1, top + pad, px - pad, pt, tNow, 1, 1, 0);
         sb_clear(); sb_text("Shorts trapped, delta "); fmtDelta(dsum);
-        trapLoLab(nTrapLo).set(pt, px - 0.3 * atrNow).text(str_tag_sb).color(TEAL);
+        trapLoLab(nTrapLo).set(pt, px - pad - 0.3 * atrNow).text(str_tag_sb).color(TEAL);
         nTrapLo += 1;
       }
     }
@@ -270,7 +282,7 @@ function onStart(): void {
   tlLook = i32(p_tl_lookback()); tlTol = p_tl_tol();
   dojiPct = p_doji_pct(); wickMult = p_wick_mult(); smallWick = p_small_wick(); candMinAtr = p_cand_min_atr(); trendN = i32(p_trend_n());
   starSmall = p_star_small(); starDepth = p_star_depth();
-  trapSpan = i32(p_trap_span()); trapMin = p_trap_min_pct();
+  trapSpan = i32(p_trap_span()); trapMin = p_trap_min_pct(); zonePad = p_zone_pad();
   confTol = p_conf_tol(); confMin = p_conf_min();
   wVwap = p_w_vwap(); wEma = p_w_ema(); wOpen = p_w_open(); wEq = p_w_eq(); wTl = p_w_tl();
   dotQty = p_dot_qty();
@@ -288,6 +300,8 @@ function onBar(): void {
   const vol = bar.volume();
   const tr = isNaN(pClose) ? h - l : Math.max(h - l, Math.max(Math.abs(h - pClose), Math.abs(l - pClose)));
   atr = isNaN(atr) ? tr : (atr * 13.0 + tr) / 14.0;
+  cycTop = 0.0;
+  cycBot = 0.0;
 
   const slot = idx % TR;
   aO[slot] = o; aH[slot] = h; aL[slot] = l; aC[slot] = c; aT[slot] = t;
@@ -351,7 +365,7 @@ function onBar(): void {
   }
   if (shStars && fMs == 1.0) {
     sb_clear(); sb_text("MORNING STAR");
-    starLabAt(nStar).set(t, l - 0.5 * atr).text(str_tag_sb).color(GREEN); nStar += 1;
+    starLabAt(nStar).set(t, l - 0.5 * atr).text(str_tag_sb).color(STAR); nStar += 1;
   }
   if (shStars && fEs == 1.0) {
     sb_clear(); sb_text("EVENING STAR");
@@ -383,6 +397,10 @@ function onBar(): void {
   out_g_mstar(shStars ? fMs : 0.0);
   out_g_estar(shStars ? fEs : 0.0);
   out_hammer(l); out_shooting(h); out_doji(h); out_mstar(l); out_estar(h);
+  out_g_cyc_top(shConf ? cycTop : 0.0);
+  out_g_cyc_bot(shConf ? cycBot : 0.0);
+  out_cyc_top(h);
+  out_cyc_bot(l);
   pClose = c;
   idx += 1;
 }
