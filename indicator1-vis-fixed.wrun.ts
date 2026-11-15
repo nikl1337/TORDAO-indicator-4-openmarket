@@ -1,5 +1,5 @@
 //@lang=wrun-ts
-// TORDAO indicator 1: confluence channels (max 3/side), peak bars, TORus — single indicator
+// TORDAO indicator 1: no draw.label — shapes/lines/histograms only (history-safe)
 
 input("close", ohlcv.close);
 input("profile", volume_profile.cells, { max_cells: 8192, missing: "empty", description: "Bar volume by price" });
@@ -12,7 +12,6 @@ param.bool("show_tl", true, { label: "Confluence channels (max 3/side)" });
 param.bool("show_patterns", true, { label: "Megaphone / wedge" });
 param.bool("show_opens", true, { label: "Session opens + prev EQ" });
 param.bool("show_targets", true, { label: "Spike targets min 2%" });
-param.bool("show_scen", true, { label: "Scenario labels" });
 param.bool("show_poc", true, { label: "POC zone" });
 param.bool("show_sig", true, { label: "Peak / near / LIQ marks" });
 param.bool("show_vd", true, { label: "Daily VWAP" });
@@ -38,7 +37,6 @@ param("conf_tol", 0.5, { min: 0.05, max: 3, description: "Conf tol ATR" });
 param.number("min_score", 20, { min: 1, max: 100, label: "Min reaction score", when: "show_sig" });
 param.number("peak_score", 45, { min: 25, max: 100, label: "Peak neon threshold", when: "show_sig" });
 param.number("near_score", 40, { min: 20, max: 80, label: "Near-peak threshold", when: "show_sig" });
-param("keep_score", 50, { min: 1, max: 100, description: "Min label score" });
 param.number("tgt_min_pct", 2.0, { min: 1.0, max: 5.0, step: 0.25, label: "Min target %", when: "show_targets" });
 param.number("tgt_max_pct", 7.0, { min: 3.0, max: 15.0, step: 0.5, label: "Max target %", when: "show_targets" });
 
@@ -85,6 +83,7 @@ const gNearBuy = output("g_near_buy", none);
 const gNearSell = output("g_near_sell", none);
 const gLiqBuy = output("g_liq_buy", none);
 const gLiqSell = output("g_liq_sell", none);
+const gTorus = output("g_torus", none);
 box("neon_buy", { top: dTop, bottom: dBot, when: gBuy, color: "#00ffd5", opacity: 0.5, borderColor: "#00ffd5", borderWidth: 2, z: 5 });
 box("neon_sell", { top: sTop, bottom: sBot, when: gSell, color: "#ff2bd6", opacity: 0.5, borderColor: "#ff2bd6", borderWidth: 2, z: 5 });
 output("sig_buy", shape, overlay, { color: "#00ffd5", shape_where: "g_buy", shape: "triangle_up", location: "below_bar", glow: 10, description: "Buy reaction" });
@@ -95,6 +94,7 @@ output("near_buy", shape, overlay, { color: "#5eead4", shape_where: "g_near_buy"
 output("near_sell", shape, overlay, { color: "#f472b6", shape_where: "g_near_sell", shape: "circle", location: "above_bar", glow: 6, description: "Near-peak sell" });
 output("liq_buy", shape, overlay, { color: "#ffffff", shape_where: "g_liq_buy", shape: "diamond", location: "below_bar", glow: 8, description: "LIQ buy" });
 output("liq_sell", shape, overlay, { color: "#ffffff", shape_where: "g_liq_sell", shape: "diamond", location: "above_bar", glow: 8, description: "LIQ sell" });
+output("torus_sig", shape, overlay, { color: "#ffffff", shape_where: "g_torus", shape: "circle", location: "above_bar", glow: 12, description: "TORus Signal" });
 
 output("conf_buy", histogram, lower, { color: "#00ffd5", description: "Buy confluence", format: "int" });
 output("conf_sell", histogram, lower, { color: "#ff2bd6", description: "Sell confluence", format: "int" });
@@ -109,7 +109,6 @@ output("poc_bar", scatter, overlay, { color: "#fbbf24", description: "Bar POC" }
 output("poc_lvl", line, overlay, { color: "#fbbf24", width: 2, step: true, line_style: "solid", description: "POC mid" });
 param.number("poc_half_atr", 0.35, { min: 0.05, max: 2, step: 0.05, label: "POC half ATR", when: "show_poc" });
 
-// 3 resistance channels (upper solid + lower solid + dotted mid)
 output("pk_res1", line, overlay, { color: "#f87171", width: 2, line_style: "solid", description: "Res1 upper" });
 output("pk_res1m", line, overlay, { color: "#fca5a5", width: 1, line_style: "dotted", description: "Res1 mid" });
 output("pk_res1lo", line, overlay, { color: "#f87171", width: 1, line_style: "solid", description: "Res1 lower" });
@@ -119,7 +118,6 @@ output("pk_res2lo", line, overlay, { color: "#dc2626", width: 1, line_style: "so
 output("pk_res3", line, overlay, { color: "#991b1b", width: 2, line_style: "solid", description: "Res3 upper" });
 output("pk_res3m", line, overlay, { color: "#fca5a5", width: 1, line_style: "dotted", description: "Res3 mid" });
 output("pk_res3lo", line, overlay, { color: "#991b1b", width: 1, line_style: "solid", description: "Res3 lower" });
-// 3 support channels
 output("pk_sup1", line, overlay, { color: "#4ade80", width: 1, line_style: "solid", description: "Sup1 lower" });
 output("pk_sup1m", line, overlay, { color: "#86efac", width: 1, line_style: "dotted", description: "Sup1 mid" });
 output("pk_sup1hi", line, overlay, { color: "#4ade80", width: 2, line_style: "solid", description: "Sup1 upper" });
@@ -155,31 +153,6 @@ alert("buy_reaction", { when: gBuy, message: "{{symbol}}: BUY {{close}}", descri
 alert("sell_reaction", { when: gSell, message: "{{symbol}}: SELL {{close}}", description: "Sell" });
 alert("peak_buy_al", { when: gPeakBuy, message: "{{symbol}}: PEAK BUY {{close}}", description: "Peak buy" });
 alert("peak_sell_al", { when: gPeakSell, message: "{{symbol}}: PEAK SELL {{close}}", description: "Peak sell" });
-
-string("tag", { max_bytes: 48 });
-handles.label({ size: 18 });
-const TEAL: i32 = rgba(0, 255, 213, 255);
-const PINK: i32 = rgba(255, 43, 214, 255);
-const WHITE: i32 = rgba(255, 255, 255, 255);
-const buyTag0 = draw.label(0);
-const buyTag1 = draw.label(1);
-const buyTag2 = draw.label(2);
-const buyTag3 = draw.label(3);
-const buyTag4 = draw.label(4);
-const buyTag5 = draw.label(5);
-const sellTag0 = draw.label(6);
-const sellTag1 = draw.label(7);
-const sellTag2 = draw.label(8);
-const sellTag3 = draw.label(9);
-const sellTag4 = draw.label(10);
-const sellTag5 = draw.label(11);
-const pocTag = draw.label(12);
-const scenTag = draw.label(13);
-const liqBuyTag = draw.label(14);
-const liqSellTag = draw.label(15);
-const pressTag = draw.label(16);
-const torusTag = draw.label(17);
-let nBuy: i32 = 0; let nSell: i32 = 0; let keepScore: f64 = 50.0;
 
 function vpPocIndex(cells: StaticArray<f64>, n: i32): i32 {
   let best: i32 = -1; let bestVolume: f64 = -1.0;
@@ -221,7 +194,7 @@ const PKN = 96;
 const pkHi = new StaticArray<f64>(PKN);
 const pkLo = new StaticArray<f64>(PKN);
 let pkHiN: i32 = 0; let pkLoN: i32 = 0; let pkHiC: i32 = 0; let pkLoC: i32 = 0;
-let shPatterns = true; let shOpens = true; let shTargets = true; let shScen = true;
+let shPatterns = true; let shOpens = true; let shTargets = true;
 let chAtr: f64 = 0.6; let peakScore: f64 = 45.0; let tgtMin: f64 = 2.0; let tgtMax: f64 = 7.0;
 let shZones = true; let shTl = true; let shPoc = true; let shSig = true;
 let shVd = true; let shVw = true; let shVm = true;
@@ -231,7 +204,7 @@ let lastSup1: f64 = NaN; let lastSup2: f64 = NaN; let lastSup3: f64 = NaN;
 
 function onStart(): void {
   right = i32(p_swing_len()); sw = new Swings(right, right);
-  pN = i32(p_poc_lookback()); keepScore = p_keep_score();
+  pN = i32(p_poc_lookback());
   wBase = p_w_base(); wPoc = p_w_poc(); wVd = p_w_vd(); wVw = p_w_vw(); wVm = p_w_vm();
   wE1 = p_w_e1(); wE2 = p_w_e2(); wE3 = p_w_e3(); wE4 = p_w_e4(); wE5 = p_w_e5(); wE6 = p_w_e6();
   wTl = p_w_tl();
@@ -240,7 +213,7 @@ function onStart(): void {
   shZones = pb_show_zones(); shTl = pb_show_tl(); shPoc = pb_show_poc(); shSig = pb_show_sig();
   shVd = pb_show_vd(); shVw = pb_show_vw(); shVm = pb_show_vm();
   shE1 = pb_show_e1(); shE2 = pb_show_e2(); shE3 = pb_show_e3(); shE4 = pb_show_e4(); shE5 = pb_show_e5(); shE6 = pb_show_e6();
-  shPatterns = pb_show_patterns(); shOpens = pb_show_opens(); shTargets = pb_show_targets(); shScen = pb_show_scen();
+  shPatterns = pb_show_patterns(); shOpens = pb_show_opens(); shTargets = pb_show_targets();
   chAtr = p_ch_atr(); peakScore = p_peak_score(); nearScore = p_near_score();
   tgtMin = p_tgt_min_pct(); tgtMax = p_tgt_max_pct();
 }
@@ -265,8 +238,6 @@ function onBar(): void {
     else if (c > sT + near) { if (allowSfp && l <= sT && c < sT) sS = 3.0; else { sS = 4.0; sL = 0.0; lost = 1.0; } }
     else if (Math.abs(h - sT) <= near || Math.abs(l - sB) <= near) { if (sS < 1.0) sS = 1.0; }
   }
-
-  // Swing pool for confluence channels (covers ~337 bars of swings)
   if (sw.newHigh()) {
     hp2 = hp1; hi2 = hi1; hp1 = sw.lastHigh(); hi1 = idx - right;
     pkHi[pkHiC % PKN] = hp1; pkHiC += 1; if (pkHiN < PKN) pkHiN += 1;
@@ -275,7 +246,6 @@ function onBar(): void {
     lp2 = lp1; li2 = li1; lp1 = sw.lastLow(); li1 = idx - right;
     pkLo[pkLoC % PKN] = lp1; pkLoC += 1; if (pkLoN < PKN) pkLoN += 1;
   }
-
   const vol = bar.volume(); const t = bar.time();
   const bVol = in_buy_vol(); const sVol = in_sell_vol();
   volAvg = isNaN(volAvg) ? vol : (volAvg * 19.0 + vol) / 20.0;
@@ -300,7 +270,6 @@ function onBar(): void {
   let best = -1.0; const span = pcount < pN ? pcount : pN;
   for (let k = 1; k <= span; k += 1) { const j = (pcur - k + 1 + MAXP) % MAXP; const pv = pocVolRing[j]; if (!isNaN(pv) && pv > best) { best = pv; pocLvl = pocRing[j]; } }
   if (best < 0.0) pocLvl = NaN;
-
   const range = h - l; const upWick = h - Math.max(o, c); const loWick = Math.min(o, c) - l; const wickMin = p_react_wick();
   const buyReact = dL == 1.0 && dS < 4.0 && !isNaN(dT) && l <= dT && c > dB && c > o && range > 0.0 && loWick / range >= wickMin;
   const sellReact = sL == 1.0 && sS < 4.0 && !isNaN(sB) && h >= sB && c < sT && c < o && range > 0.0 && upWick / range >= wickMin;
@@ -326,7 +295,6 @@ function onBar(): void {
   const minS = p_min_score();
   const fireBuy = shSig && scoreBuy >= minS && scoreBuy > 0.0;
   const fireSell = shSig && scoreSell >= minS && scoreSell > 0.0;
-  // Peak buy looser so mega bars show like peak sells
   const peakBuy = (fireBuy && scoreBuy >= peakScore) || (buyReact && scoreBuy >= nearScore) || (buyReact && buyShare >= 0.55 && scoreBuy >= minS) || (buyReact && hiVol);
   const peakSell = (fireSell && scoreSell >= peakScore) || (sellReact && hiVol && scoreSell >= nearScore);
   if (peakBuy || (fireBuy && scoreBuy >= nearScore)) nearBuyLeft = 3;
@@ -335,25 +303,6 @@ function onBar(): void {
   const nearSellOn = nearSellLeft > 0 && !peakSell;
   if (nearBuyLeft > 0) nearBuyLeft -= 1;
   if (nearSellLeft > 0) nearSellLeft -= 1;
-
-  if (fireBuy && scoreBuy >= keepScore) {
-    const bi = nBuy % 6; nBuy += 1; sb_clear(); sb_int(i32(scoreBuy));
-    if (bi == 0) buyTag0.set(f64(t), l - 0.3 * atr).text(str_tag_sb).color(TEAL);
-    else if (bi == 1) buyTag1.set(f64(t), l - 0.3 * atr).text(str_tag_sb).color(TEAL);
-    else if (bi == 2) buyTag2.set(f64(t), l - 0.3 * atr).text(str_tag_sb).color(TEAL);
-    else if (bi == 3) buyTag3.set(f64(t), l - 0.3 * atr).text(str_tag_sb).color(TEAL);
-    else if (bi == 4) buyTag4.set(f64(t), l - 0.3 * atr).text(str_tag_sb).color(TEAL);
-    else buyTag5.set(f64(t), l - 0.3 * atr).text(str_tag_sb).color(TEAL);
-  }
-  if (fireSell && scoreSell >= keepScore) {
-    const si = nSell % 6; nSell += 1; sb_clear(); sb_int(i32(scoreSell));
-    if (si == 0) sellTag0.set(f64(t), h + 0.3 * atr).text(str_tag_sb).color(PINK);
-    else if (si == 1) sellTag1.set(f64(t), h + 0.3 * atr).text(str_tag_sb).color(PINK);
-    else if (si == 2) sellTag2.set(f64(t), h + 0.3 * atr).text(str_tag_sb).color(PINK);
-    else if (si == 3) sellTag3.set(f64(t), h + 0.3 * atr).text(str_tag_sb).color(PINK);
-    else if (si == 4) sellTag4.set(f64(t), h + 0.3 * atr).text(str_tag_sb).color(PINK);
-    else sellTag5.set(f64(t), h + 0.3 * atr).text(str_tag_sb).color(PINK);
-  }
 
   out_vwap_d(shVd ? vdv : NaN); out_vwap_w(shVw ? vwv : NaN); out_vwap_m(shVm ? vmv : NaN);
   out_ema_1(shE1 ? v1 : NaN); out_ema_2(shE2 ? v2 : NaN); out_ema_3(shE3 ? v3 : NaN);
@@ -369,13 +318,10 @@ function onBar(): void {
   const liqSell = (fireSell || sellReact) && hiVol && sL == 1.0;
   out_g_liq_buy(liqBuy ? 1.0 : 0.0); out_g_liq_sell(liqSell ? 1.0 : 0.0);
   out_liq_buy(liqBuy ? l : NaN); out_liq_sell(liqSell ? h : NaN);
-  if (liqBuy) { sb_clear(); sb_text("LIQ BUY"); liqBuyTag.set(f64(t), l - 0.6 * atr).text(str_tag_sb).color(WHITE); }
-  if (liqSell) { sb_clear(); sb_text("LIQ SELL"); liqSellTag.set(f64(t), h + 0.6 * atr).text(str_tag_sb).color(WHITE); }
   out_conf_buy(fireBuy ? scoreBuy : NaN); out_conf_sell(fireSell ? scoreSell : NaN);
   out_d_top(dT); out_d_bot(dB); out_d_live(shZones ? dL : 0.0); out_d_state(dS);
   out_s_top(sT); out_s_bot(sB); out_s_live(shZones ? sL : 0.0); out_s_state(sS);
 
-  // === Top 3 resistance channels by touch confluence ===
   if (shTl && pkHiN >= 1) {
     const half = chAtr * atr; const tolP = atr * 0.25;
     let best1 = NaN; let best2 = NaN; let best3 = NaN;
@@ -395,7 +341,6 @@ function onBar(): void {
   } else {
     out_pk_res1(NaN); out_pk_res1lo(NaN); out_pk_res1m(NaN); out_pk_res2(NaN); out_pk_res2lo(NaN); out_pk_res2m(NaN); out_pk_res3(NaN); out_pk_res3lo(NaN); out_pk_res3m(NaN);
   }
-  // === Top 3 support channels by touch confluence ===
   if (shTl && pkLoN >= 1) {
     const half = chAtr * atr; const tolP = atr * 0.25;
     let best1 = NaN; let best2 = NaN; let best3 = NaN;
@@ -418,53 +363,27 @@ function onBar(): void {
 
   if (shPoc && !isNaN(pocLvl)) {
     const half = p_poc_half_atr() * atr; out_poc_top(pocLvl + half); out_poc_bot(pocLvl - half); out_poc_live(1.0);
-    sb_clear(); sb_text("POC"); pocTag.set(f64(t), pocLvl).text(str_tag_sb).color(rgba(251, 191, 36, 255));
   } else { out_poc_top(NaN); out_poc_bot(NaN); out_poc_live(0.0); }
   if (shOpens) {
     out_open_d(dayOpen); out_open_w(weekOpen); out_open_m(monOpen);
     out_eq_pd((!isNaN(pdHi) && !isNaN(pdLo)) ? (pdHi + pdLo) * 0.5 : NaN);
   } else { out_open_d(NaN); out_open_w(NaN); out_open_m(NaN); out_eq_pd(NaN); }
-
   if (shPatterns && !isNaN(hp1) && !isNaN(hp2) && !isNaN(lp1) && !isNaN(lp2) && hi1 != hi2 && li1 != li2) {
     const hs2 = (hp1 - hp2) / f64(hi1 - hi2); const ls2 = (lp1 - lp2) / f64(li1 - li2);
     out_pat_hi(hp1 + hs2 * f64(idx - hi1)); out_pat_lo(lp1 + ls2 * f64(idx - li1));
   } else { out_pat_hi(NaN); out_pat_lo(NaN); }
-
-  {
-    sb_clear();
-    let pcol: i32 = WHITE;
-    if (buyShare >= 0.62) { sb_text("BULL BREAKOUT"); pcol = TEAL; }
-    else if (sellShare >= 0.62) { sb_text("BEAR BREAKOUT"); pcol = PINK; }
-    else if (buyShare >= 0.55) { sb_text("BUY PRESSURE"); pcol = TEAL; }
-    else if (sellShare >= 0.55) { sb_text("SELL PRESSURE"); pcol = PINK; }
-    else { sb_text(""); }
-    pressTag.set(f64(t), c).text(str_tag_sb).color(pcol);
-  }
-
   if (shTargets) {
     const loPct = tgtMin / 100.0; const hiPct = tgtMax / 100.0;
     out_tgt_b1(c * (1.0 + loPct)); out_tgt_b2(c * (1.0 + hiPct * 0.85));
     out_tgt_s1(c * (1.0 - loPct)); out_tgt_s2(c * (1.0 - hiPct * 0.85));
   } else { out_tgt_b1(NaN); out_tgt_b2(NaN); out_tgt_s1(NaN); out_tgt_s2(NaN); }
 
-  // Mega bars: peak buy/sell dominate lower panel
   if (peakBuy) { out_peak_bar_buy(100.0); out_peak_bar_sell(0.0); }
   else if (peakSell) { out_peak_bar_buy(0.0); out_peak_bar_sell(100.0); }
   else if (fireBuy) { out_peak_bar_buy(Math.max(40.0, scoreBuy)); out_peak_bar_sell(0.0); }
   else if (fireSell) { out_peak_bar_buy(0.0); out_peak_bar_sell(Math.max(40.0, scoreSell)); }
   else { out_peak_bar_buy(0.0); out_peak_bar_sell(0.0); }
 
-  if (shScen) {
-    sb_clear();
-    let scol: i32 = WHITE;
-    if (peakBuy) { sb_text("GOOD BUY "); sb_int(i32(scoreBuy)); scol = TEAL; }
-    else if (peakSell) { sb_text("GOOD SELL "); sb_int(i32(scoreSell)); scol = PINK; }
-    else if (buyShare >= sellShare) { sb_text("BUY PRESSURE"); scol = TEAL; }
-    else { sb_text("SELL PRESSURE"); scol = PINK; }
-    scenTag.set(f64(t), h + 1.2 * atr).text(str_tag_sb).color(scol);
-  }
-
-  // TORus Signal: channel / daily VWAP / EMA50 touch
   {
     let torus = false;
     if (!isNaN(vdv) && l <= vdv && h >= vdv) torus = true;
@@ -475,10 +394,8 @@ function onBar(): void {
     if (!isNaN(lastSup1) && l <= lastSup1 && h >= lastSup1) torus = true;
     if (!isNaN(lastSup2) && l <= lastSup2 && h >= lastSup2) torus = true;
     if (!isNaN(lastSup3) && l <= lastSup3 && h >= lastSup3) torus = true;
-    if (torus) {
-      sb_clear(); sb_text("TORus Signal");
-      torusTag.set(f64(t), h + 0.8 * atr).text(str_tag_sb).color(WHITE);
-    }
+    out_g_torus(torus ? 1.0 : 0.0);
+    out_torus_sig(torus ? h : NaN);
   }
   pClose = c; idx += 1;
 }
