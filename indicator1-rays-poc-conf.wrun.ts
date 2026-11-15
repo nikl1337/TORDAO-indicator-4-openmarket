@@ -61,14 +61,21 @@ param("ema4", 360, { min: 2, max: 2000, description: "EMA 4 length" });
 param("ema5", 667, { min: 2, max: 2000, description: "EMA 5 length" });
 param("ema6", 800, { min: 2, max: 2000, description: "EMA 6 length" });
 
-const dTop = output("d_top", none), dBot = output("d_bot", none), dLive = output("d_live", none), dState = output("d_state", none);
-const sTop = output("s_top", none), sBot = output("s_bot", none), sLive = output("s_live", none), sState = output("s_state", none);
+const dTop = output("d_top", none);
+const dBot = output("d_bot", none);
+const dLive = output("d_live", none);
+const dState = output("d_state", none);
+const sTop = output("s_top", none);
+const sBot = output("s_bot", none);
+const sLive = output("s_live", none);
+const sState = output("s_state", none);
 box("demand_zone", { top: dTop, bottom: dBot, when: dLive, colorBy: dState, borderWidth: 1, borderStyle: "solid", opacity: 0.22,
   colors: ["#22c55e", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColors: ["#22c55e", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColorBy: dState });
 box("supply_zone", { top: sTop, bottom: sBot, when: sLive, colorBy: sState, borderWidth: 1, borderStyle: "solid", opacity: 0.22,
   colors: ["#ef4444", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColors: ["#ef4444", "#facc15", "#38bdf8", "#f97316", "#64748b"], borderColorBy: sState });
 
-const gBuy = output("g_buy", none), gSell = output("g_sell", none);
+const gBuy = output("g_buy", none);
+const gSell = output("g_sell", none);
 box("neon_buy", { top: dTop, bottom: dBot, when: gBuy, color: "#00ffd5", opacity: 0.55, borderColor: "#00ffd5", borderWidth: 2, z: 5 });
 box("neon_sell", { top: sTop, bottom: sBot, when: gSell, color: "#ff2bd6", opacity: 0.55, borderColor: "#ff2bd6", borderWidth: 2, z: 5 });
 plot.spans({ name: "conf", slots: 2, colors: ["#00ffd5", "#ff2bd6"], opacity: 0.35, border: { width: 2, opacity: 0.95 },
@@ -88,7 +95,10 @@ param.number("poc_half_atr", 0.35, { min: 0.05, max: 2, step: 0.05, label: "POC 
 
 plot.rays({ name: "tl", slots: 2, colors: ["#ef4444", "#22c55e"], width: 2, line_style: "dashed", opacity: 0.95,
   words: ["Resistance ray", "Support ray"], tooltip: "{{word}}", panel: "overlay" });
-const gBU = output("g_brk_up", none), gBD = output("g_brk_dn", none), gRU = output("g_ret_up", none), gRD = output("g_ret_dn", none);
+const gBU = output("g_brk_up", none);
+const gBD = output("g_brk_dn", none);
+const gRU = output("g_ret_up", none);
+const gRD = output("g_ret_dn", none);
 const gLost = output("g_zone_lost", none);
 output("brk_up", shape, overlay, { color: "#00ffd5", shape_where: "g_brk_up", shape: "square", location: "below_bar", glow: 12, description: "Breakout of resistance (square)" });
 output("brk_dn", shape, overlay, { color: "#ff2bd6", shape_where: "g_brk_dn", shape: "square", location: "above_bar", glow: 12, description: "Breakdown of support (square)" });
@@ -205,7 +215,6 @@ function onBar(): void {
   const tr = isNaN(pClose) ? h - l : Math.max(h - l, Math.max(Math.abs(h - pClose), Math.abs(l - pClose)));
   atr = isNaN(atr) ? tr : (atr * 13.0 + tr) / 14.0;
 
-  // ---- Zones from swings
   sw.update(h, l);
   const zDepth = p_zone_atr() * atr;
   const near = p_near_atr() * atr;
@@ -251,7 +260,6 @@ function onBar(): void {
     }
   }
 
-  // ---- 3-touch trendlines
   const tol = p_tl_tol() * atr;
   if (sw.newHigh()) {
     hp3 = hp2; hi3 = hi2; hp2 = hp1; hi2 = hi1; hp1 = sw.lastHigh(); hi1 = idx - right;
@@ -323,7 +331,6 @@ function onBar(): void {
   }
   if (best < 0.0) pocLvl = NaN;
 
-  // Close-confirmed reactions (wick rejection + directional close)
   const range = h - l;
   const upWick = h - Math.max(o, c);
   const loWick = Math.min(o, c) - l;
