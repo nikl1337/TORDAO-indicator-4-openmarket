@@ -1,5 +1,5 @@
 //@lang=wrun-ts
-// TORDAO indicator 1: peak/near, LIQ, pressure labels, mega peak bars, fat 1337 lines
+// TORDAO indicator 1: peak/near, LIQ, pressure labels, mega peak bars, fat 1337 lines (max 8 ray colors)
 
 input("close", ohlcv.close);
 input("profile", volume_profile.cells, { max_cells: 8192, missing: "empty", description: "Bar volume by price" });
@@ -166,8 +166,8 @@ output("tp_b1", line, overlay, { color: "#2dd4bf", width: 1, line_style: "dashed
 output("tp_b2", line, overlay, { color: "#2dd4bf", width: 1, line_style: "dashed", description: "Time-pivot bull 2" });
 output("tp_s1", line, overlay, { color: "#e879f9", width: 1, line_style: "dashed", description: "Time-pivot bear 1" });
 output("tp_s2", line, overlay, { color: "#e879f9", width: 1, line_style: "dashed", description: "Time-pivot bear 2" });
-plot.rays({ name: "fat", slots: 12, colors: ["#ef4444","#ef4444","#ef4444","#ef4444","#ef4444","#ef4444","#22c55e","#22c55e","#22c55e","#22c55e","#22c55e","#22c55e"], width: 4, line_style: "solid", opacity: 0.95,
-  words: ["UP PEAKS","UP PEAKS","UP PEAKS","UP PEAKS","UP PEAKS","UP PEAKS","DN TROUGHS","DN TROUGHS","DN TROUGHS","DN TROUGHS","DN TROUGHS","DN TROUGHS"], tooltip: "{{word}}", panel: "overlay" });
+plot.rays({ name: "fat", slots: 8, colors: ["#ef4444","#ef4444","#ef4444","#ef4444","#22c55e","#22c55e","#22c55e","#22c55e"], width: 4, line_style: "solid", opacity: 0.95,
+  words: ["UP PEAKS","UP PEAKS","UP PEAKS","UP PEAKS","DN TROUGHS","DN TROUGHS","DN TROUGHS","DN TROUGHS"], tooltip: "{{word}}", panel: "overlay" });
 
 const gBU = output("g_brk_up", none);
 const gBD = output("g_brk_dn", none);
@@ -328,7 +328,7 @@ function onBar(): void {
     hp3 = hp2; hi3 = hi2; hp2 = hp1; hi2 = hi1; hp1 = sw.lastHigh(); hi1 = idx - right;
     pkHi[pkHiC % PKN] = hp1; pkHiC += 1; if (pkHiN < PKN) pkHiN += 1;
     if (!isNaN(prevHiPx) && !isNaN(prevHiT) && hi1 - prevHiI <= FAT_MAX && hi1 > prevHiI && hp1 >= prevHiPx) {
-      const slot = fatUpN % 6;
+      const slot = fatUpN % 4;
       out_fat_ray_at(slot, prevHiPx, hp1, prevHiT, bar.time(), slot, slot, 1);
       fatUpN += 1;
     }
@@ -342,7 +342,7 @@ function onBar(): void {
     lp3 = lp2; li3 = li2; lp2 = lp1; li2 = li1; lp1 = sw.lastLow(); li1 = idx - right;
     pkLo[pkLoC % PKN] = lp1; pkLoC += 1; if (pkLoN < PKN) pkLoN += 1;
     if (!isNaN(prevLoPx) && !isNaN(prevLoT) && li1 - prevLoI <= FAT_MAX && li1 > prevLoI && lp1 <= prevLoPx) {
-      const slot = 6 + (fatDnN % 6);
+      const slot = 4 + (fatDnN % 4);
       out_fat_ray_at(slot, prevLoPx, lp1, prevLoT, bar.time(), slot, slot, 1);
       fatDnN += 1;
     }
