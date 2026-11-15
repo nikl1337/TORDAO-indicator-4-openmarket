@@ -158,8 +158,8 @@ alert("retest_up", { when: gRU, message: "{{symbol}}: retest up {{close}}", desc
 alert("retest_dn", { when: gRD, message: "{{symbol}}: retest dn {{close}}", description: "Retest dn" });
 alert("buy_reaction", { when: gBuy, message: "{{symbol}}: BUY {{close}}", description: "Buy" });
 alert("sell_reaction", { when: gSell, message: "{{symbol}}: SELL {{close}}", description: "Sell" });
-alert("peak_buy", { when: gPeakBuy, message: "{{symbol}}: PEAK BUY {{close}}", description: "Peak buy" });
-alert("peak_sell", { when: gPeakSell, message: "{{symbol}}: PEAK SELL {{close}}", description: "Peak sell" });
+alert("peak_buy_al", { when: gPeakBuy, message: "{{symbol}}: PEAK BUY {{close}}", description: "Peak buy alert" });
+alert("peak_sell_al", { when: gPeakSell, message: "{{symbol}}: PEAK SELL {{close}}", description: "Peak sell alert" });
 
 string("tag", { max_bytes: 48 });
 handles.label({ size: 16 });
