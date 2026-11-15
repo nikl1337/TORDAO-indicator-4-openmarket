@@ -1,3 +1,3 @@
 //@lang=wrun-ts
-// SEE ARTIFACTS - full content push in progress
+// Restored base - download INDICATOR3-zones-hammers-traps.wrun.ts from chat for full zones version
 function onBar(): void {}
