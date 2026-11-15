@@ -71,7 +71,7 @@ plot.rays({ name: "tl", slots: 2, colors: ["#ff2bd6", "#00ffd5"], width: 1.5, li
 plot.spans({ name: "trap", slots: 2, colors: ["#ff2bd6", "#00ffd5"], opacity: 0.22, border: { width: 1, opacity: 0.9 }, words: ["Trapped longs", "Trapped shorts"], tooltip: "{{word}} {{bottom}} to {{top}}", panel: "overlay" });
 plot.spans({ name: "cz", slots: 4, colors: ["#ef4444", "#f87171", "#22c55e", "#4ade80", "#9ca3af"], opacity: 0.2, border: { width: 1, opacity: 0.85 }, words: ["DUMP", "DUMP", "PUMP", "PUMP", "HIT"], tooltip: "{{word}} {{bottom}} to {{top}}", panel: "overlay" });
 plot.marks({ name: "dvw", slots: 1, size: { law: "sqrt", unit: 1, scale: 10 }, opacity_pct: 80, look: 0, text: { mode: 0 }, colors: ["#ff8c00", "#ff8c00"], tooltip: "Daily VWAP touched at {{price}}", panel: "overlay" });
-plot.marks({ name: "e50", slots: 1, size: { law: "sqrt", unit: 1, scale: 10 }, opacity_pct: 90, look: 0, text: { mode: 0 }, colors: ["#ffffff", "#ffffff"], tooltip: "EMA 50 touched at {{price}}", panel: "overlay" });
+plot.marks({ name: "e50", slots: 1, size: { law: "sqrt", unit: 1, scale: 10 }, opacity_pct: 80, look: 0, text: { mode: 0 }, colors: ["#ffffff", "#ffffff"], tooltip: "EMA 50 touched at {{price}}", panel: "overlay" });
 
 alert("dvwap_touch", { when: gDv, message: "{{symbol}}: daily VWAP touched or smashed at {{close}}", title: "Daily VWAP", description: "Price touched or crossed the daily VWAP (once per 15m candle)" });
 alert("ema21_touch", { when: gE21, message: "{{symbol}}: EMA 21 touched or smashed at {{close}}", title: "EMA 21", description: "Price touched or crossed the EMA 21 of the chart timeframe" });
