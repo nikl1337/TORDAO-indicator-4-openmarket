@@ -1,1 +1,3 @@
-FILE_TOO_LARGE_USE_CREATE
+//@lang=wrun-ts
+// SEE ARTIFACTS - full content push in progress
+function onBar(): void {}
