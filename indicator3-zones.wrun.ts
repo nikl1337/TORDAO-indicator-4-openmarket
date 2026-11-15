@@ -2,6 +2,7 @@
 // TORDAO INDICATOR 3: candles, trendline rays, traps, hammer labels,
 // 4 confluence zones (2 red above / 2 green below) with NY-open weight,
 // hit zones turn grey and are replaced. Swing length default 3.
+// FIX: pattern text labels, zone left extent, EMA50 marks+edge alerts.
 
 input("buy_vol", trades.volume, { side: "BUY", description: "Taker buy volume per bar, in coins" });
 input("sell_vol", trades.volume, { side: "SELL", description: "Taker sell volume per bar, in coins" });
@@ -13,7 +14,7 @@ param.bool("show_traps", true, { label: "Trapped longs / shorts boxes with delta
 param.bool("show_conf", true, { label: "Green HAMMER / red INV HAMMER text vs EMA 21" });
 param.bool("show_ema50", true, { label: "White circle when price touches EMA 50" });
 param.bool("show_zones", true, { label: "4 confluence pump/dump zones (NY open weighted)" });
-param.number("zone_h_atr", 0.35, { min: 0.1, max: 2, step: 0.05, label: "Zone height in ATR", when: "show_zones" });
+param.number("zone_h_atr", 0.6, { min: 0.1, max: 3, step: 0.05, label: "Zone height in ATR", when: "show_zones" });
 param.bool("show_dvwap_dot", true, { label: "Orange dot when daily VWAP is touched or smashed" });
 param.bool("show_lines", true, { label: "Show daily VWAP and EMA 21 lines" });
 param.bool("en_dvwap_alert", true, { label: "Alert: daily VWAP touched or smashed (once per 15m candle)" });
@@ -70,6 +71,7 @@ plot.rays({ name: "tl", slots: 2, colors: ["#ff2bd6", "#00ffd5"], width: 1.5, li
 plot.spans({ name: "trap", slots: 2, colors: ["#ff2bd6", "#00ffd5"], opacity: 0.22, border: { width: 1, opacity: 0.9 }, words: ["Trapped longs", "Trapped shorts"], tooltip: "{{word}} {{bottom}} to {{top}}", panel: "overlay" });
 plot.spans({ name: "cz", slots: 4, colors: ["#ef4444", "#f87171", "#22c55e", "#4ade80", "#9ca3af"], opacity: 0.2, border: { width: 1, opacity: 0.85 }, words: ["DUMP", "DUMP", "PUMP", "PUMP", "HIT"], tooltip: "{{word}} {{bottom}} to {{top}}", panel: "overlay" });
 plot.marks({ name: "dvw", slots: 1, size: { law: "sqrt", unit: 1, scale: 10 }, opacity_pct: 80, look: 0, text: { mode: 0 }, colors: ["#ff8c00", "#ff8c00"], tooltip: "Daily VWAP touched at {{price}}", panel: "overlay" });
+plot.marks({ name: "e50", slots: 1, size: { law: "sqrt", unit: 1, scale: 10 }, opacity_pct: 90, look: 0, text: { mode: 0 }, colors: ["#ffffff", "#ffffff"], tooltip: "EMA 50 touched at {{price}}", panel: "overlay" });
 
 alert("dvwap_touch", { when: gDv, message: "{{symbol}}: daily VWAP touched or smashed at {{close}}", title: "Daily VWAP", description: "Price touched or crossed the daily VWAP (once per 15m candle)" });
 alert("ema21_touch", { when: gE21, message: "{{symbol}}: EMA 21 touched or smashed at {{close}}", title: "EMA 21", description: "Price touched or crossed the EMA 21 of the chart timeframe" });
@@ -154,6 +156,7 @@ let pClose: f64 = NaN;
 let emaSeeded = false;
 let emaWarm: i32 = 21;
 let prevETouch = false;
+let prevE50Touch = false;
 let lastDvBucket: i32 = -1;
 let dayKey: i32 = -1; let weekKey: i32 = -1; let monKey: i32 = -1;
 let dayOpen: f64 = NaN; let weekOpen: f64 = NaN; let monOpen: f64 = NaN;
@@ -165,7 +168,7 @@ let sOn = false; let sI0: i32 = 0; let sP0: f64 = 0.0; let sM: f64 = 0.0;
 let nTrapHi: i32 = 0; let nTrapLo: i32 = 0; let nConfUp: i32 = 0; let nConfDn: i32 = 0; let nStar: i32 = 0;
 let nHam: i32 = 0;
 let shZones = true;
-let zoneHAtr: f64 = 0.35;
+let zoneHAtr: f64 = 0.6;
 const zTopA = new StaticArray<f64>(4);
 const zBotA = new StaticArray<f64>(4);
 const zT0A = new StaticArray<f64>(4);
@@ -376,7 +379,9 @@ function placeZone(i: i32, mid: f64, above: bool, atrNow: f64, t0: f64): void {
   const half = zoneHAtr * atrNow * 0.5;
   zTopA[i] = mid + half;
   zBotA[i] = mid - half;
-  zT0A[i] = t0;
+  let tStart = t0 - 86400.0;
+  if (idx > 80) tStart = aT[(idx - 80) % TR];
+  zT0A[i] = tStart;
   zHitA[i] = 0;
   zSideA[i] = above ? 0 : 1;
   let pct = 35 + levelCluster(mid, atrNow) * 10 + nyBoost(t0);
@@ -488,28 +493,38 @@ function onBar(): void {
 
   let fHam = 0.0; let fShoot = 0.0; let fDoji = 0.0; let fMs = 0.0; let fEs = 0.0;
   const range = h - l;
-  if (range > 0.0 && range >= candMinAtr * atr && idx > trendN + 2) {
+  if (range > 0.0 && range >= candMinAtr * atr && idx > 2) {
     const body = Math.abs(c - o);
     const upW = h - Math.max(o, c);
     const loW = Math.min(o, c) - l;
-    const cPrev = aC[(idx - 1) % TR];
-    const cBack = aC[(idx - 1 - trendN) % TR];
-    const down = cPrev < cBack;
-    const up = cPrev > cBack;
     if (body <= dojiPct / 100.0 * range) fDoji = 1.0;
     else if (body > 0.0) {
-      if (loW >= wickMult * body && upW <= smallWick / 100.0 * range && down) fHam = 1.0;
-      else if (upW >= wickMult * body && loW <= smallWick / 100.0 * range && up) fShoot = 1.0;
+      if (loW >= wickMult * body && upW <= smallWick / 100.0 * range) fHam = 1.0;
+      else if (upW >= wickMult * body && loW <= smallWick / 100.0 * range) fShoot = 1.0;
     }
-    const o1 = aO[(idx - 1) % TR]; const c1 = aC[(idx - 1) % TR];
-    const o2 = aO[(idx - 2) % TR]; const c2 = aC[(idx - 2) % TR];
-    const b2 = Math.abs(o2 - c2); const b1 = Math.abs(o1 - c1);
-    const cBack2 = aC[(idx - 2 - trendN) % TR];
-    if (b2 >= candMinAtr * atr && b1 <= starSmall / 100.0 * b2) {
-      const mid2 = (o2 + c2) * 0.5;
-      if (c2 < o2 && c2 < cBack2 && Math.max(o1, c1) <= mid2 && c > o && c >= c2 + starDepth / 100.0 * (o2 - c2)) fMs = 1.0;
-      if (c2 > o2 && c2 > cBack2 && Math.min(o1, c1) >= mid2 && c < o && c <= c2 - starDepth / 100.0 * (c2 - o2)) fEs = 1.0;
+    if (idx > trendN + 2) {
+      const o1 = aO[(idx - 1) % TR]; const c1 = aC[(idx - 1) % TR];
+      const o2 = aO[(idx - 2) % TR]; const c2 = aC[(idx - 2) % TR];
+      const b2 = Math.abs(o2 - c2); const b1 = Math.abs(o1 - c1);
+      const cBack2 = aC[(idx - 2 - trendN) % TR];
+      if (b2 >= candMinAtr * atr && b1 <= starSmall / 100.0 * b2) {
+        const mid2 = (o2 + c2) * 0.5;
+        if (c2 < o2 && c2 < cBack2 && Math.max(o1, c1) <= mid2 && c > o && c >= c2 + starDepth / 100.0 * (o2 - c2)) fMs = 1.0;
+        if (c2 > o2 && c2 > cBack2 && Math.min(o1, c1) >= mid2 && c < o && c <= c2 - starDepth / 100.0 * (c2 - o2)) fEs = 1.0;
+      }
     }
+  }
+  if (shCandles && fHam == 1.0) {
+    sb_clear(); sb_text("HAMMER");
+    hamLabAt(nHam).set(t, l - 0.5 * atr).text(str_tag_sb).color(TEAL); nHam += 1;
+  }
+  if (shCandles && fShoot == 1.0) {
+    sb_clear(); sb_text("SHOOTING");
+    hamLabAt(nHam).set(t, h + 0.5 * atr).text(str_tag_sb).color(PINK); nHam += 1;
+  }
+  if (shCandles && fDoji == 1.0) {
+    sb_clear(); sb_text("DOJI");
+    hamLabAt(nHam).set(t, h + 0.35 * atr).text(str_tag_sb).color(rgba(255, 255, 255, 255)); nHam += 1;
   }
   if (shStars && fMs == 1.0) {
     sb_clear(); sb_text("MORNING STAR");
@@ -551,7 +566,12 @@ function onBar(): void {
     }
   }
   let fE50 = 0.0;
-  if (shEma50 && idx >= ema50Len && l <= e50 && h >= e50) fE50 = 1.0;
+  const e50Touch = shEma50 && idx >= 5 && l <= e50 && h >= e50;
+  if (e50Touch && !prevE50Touch) {
+    fE50 = 1.0;
+    out_e50_mark(0, e50, 8.0, 0, 1, 0);
+  }
+  prevE50Touch = e50Touch;
   const eTouch = l <= e21 && h >= e21;
   const fE = (eTouch && !prevETouch && enEmaAlert && idx >= emaWarm) ? 1.0 : 0.0;
   prevETouch = eTouch;
@@ -591,11 +611,15 @@ function onBar(): void {
   out_g_doji(shCandles ? fDoji : 0.0);
   out_g_mstar(shStars ? fMs : 0.0);
   out_g_estar(shStars ? fEs : 0.0);
-  out_hammer(l); out_shooting(h); out_doji(h); out_mstar(l); out_estar(h);
+  out_hammer((shCandles && fHam > 0.0) ? l : NaN);
+  out_shooting((shCandles && fShoot > 0.0) ? h : NaN);
+  out_doji((shCandles && fDoji > 0.0) ? h : NaN);
+  out_mstar((shStars && fMs > 0.0) ? l : NaN);
+  out_estar((shStars && fEs > 0.0) ? h : NaN);
   out_g_cyc_top(cycTop);
   out_g_cyc_bot(cycBot);
   out_g_ema50(fE50);
-  out_cyc_ema50(e50);
+  out_cyc_ema50(e50Touch ? e50 : NaN);
   pClose = c;
   idx += 1;
 }
