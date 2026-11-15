@@ -10,7 +10,7 @@ param.bool("show_candles", true, { label: "Highlight hammer, shooting star, doji
 param.bool("show_stars", true, { label: "Highlight morning star and evening star" });
 param.bool("show_trend", true, { label: "Auto trendline rays (never disappear)" });
 param.bool("show_traps", true, { label: "Trapped longs / shorts boxes with delta" });
-param.bool("show_conf", true, { label: "Hammer / inverted-hammer circles vs EMA 21" });
+param.bool("show_conf", true, { label: "Green HAMMER / red INV HAMMER text vs EMA 21" });
 param.bool("show_ema50", true, { label: "White circle when price touches EMA 50" });
 param.bool("show_dvwap_dot", true, { label: "Orange dot when daily VWAP is touched or smashed" });
 param.bool("show_lines", true, { label: "Show daily VWAP and EMA 21 lines" });
@@ -61,8 +61,6 @@ output("shooting", shape, overlay, { color: "#ff2bd6", shape_where: "g_shoot", s
 output("doji", shape, overlay, { color: "#ffffff", shape_where: "g_doji", shape: "diamond", location: "above_bar", glow: 8, description: "Doji" });
 output("mstar", shape, overlay, { color: "#39ff14", shape_where: "g_mstar", shape: "diamond", location: "below_bar", glow: 10, description: "Morning star (bottom reversal)" });
 output("estar", shape, overlay, { color: "#ff2bd6", shape_where: "g_estar", shape: "diamond", location: "above_bar", glow: 10, description: "Evening star (top reversal)" });
-output("cyc_top", shape, overlay, { color: "#ef4444", shape_where: "g_cyc_top", shape: "circle", location: "above_bar", glow: 16, description: "Inverted hammer above EMA 21" });
-output("cyc_bot", shape, overlay, { color: "#22c55e", shape_where: "g_cyc_bot", shape: "circle", location: "below_bar", glow: 16, description: "Hammer below EMA 21" });
 const gE50 = output("g_ema50", none);
 output("cyc_ema50", shape, overlay, { color: "#ffffff", shape_where: "g_ema50", shape: "circle", location: "above_bar", glow: 12, description: "EMA 50 touch" });
 
@@ -72,8 +70,8 @@ plot.marks({ name: "dvw", slots: 1, size: { law: "sqrt", unit: 1, scale: 10 }, o
 
 alert("dvwap_touch", { when: gDv, message: "{{symbol}}: daily VWAP touched or smashed at {{close}}", title: "Daily VWAP", description: "Price touched or crossed the daily VWAP (once per 15m candle)" });
 alert("ema21_touch", { when: gE21, message: "{{symbol}}: EMA 21 touched or smashed at {{close}}", title: "EMA 21", description: "Price touched or crossed the EMA 21 of the chart timeframe" });
-alert("cyc_top_alert", { when: gTop, message: "{{symbol}}: inverted hammer above EMA 21", title: "Red circle", description: "Inverted hammer while price is above EMA 21" });
-alert("cyc_bot_alert", { when: gBot, message: "{{symbol}}: hammer below EMA 21", title: "Green circle", description: "Hammer while price is below EMA 21" });
+alert("cyc_top_alert", { when: gTop, message: "{{symbol}}: inverted hammer above EMA 21", title: "Red text", description: "INV HAMMER label while price is above EMA 21" });
+alert("cyc_bot_alert", { when: gBot, message: "{{symbol}}: hammer below EMA 21", title: "Green text", description: "HAMMER label while price is below EMA 21" });
 alert("ema50_touch", { when: gE50, message: "{{symbol}}: EMA 50 touched", title: "EMA 50", description: "Price touched EMA 50" });
 
 string("tag", { max_bytes: 48 });
@@ -94,6 +92,8 @@ const lab28 = draw.label(28); const lab29 = draw.label(29); const lab30 = draw.l
 const lab32 = draw.label(32); const lab33 = draw.label(33); const lab34 = draw.label(34); const lab35 = draw.label(35);
 const lab40 = draw.label(40); const lab41 = draw.label(41); const lab42 = draw.label(42);
 const lab43 = draw.label(43); const lab44 = draw.label(44); const lab45 = draw.label(45);
+const lab50 = draw.label(50); const lab51 = draw.label(51); const lab52 = draw.label(52); const lab53 = draw.label(53);
+const lab54 = draw.label(54); const lab55 = draw.label(55); const lab56 = draw.label(56); const lab57 = draw.label(57);
 
 function trapHiLab(i: i32): LabelHandle {
   const k = i % 8;
@@ -119,6 +119,11 @@ function starLabAt(i: i32): LabelHandle {
   const k = i % 6;
   if (k == 0) return lab40; if (k == 1) return lab41; if (k == 2) return lab42;
   if (k == 3) return lab43; if (k == 4) return lab44; return lab45;
+}
+function hamLabAt(i: i32): LabelHandle {
+  const k = i % 8;
+  if (k == 0) return lab50; if (k == 1) return lab51; if (k == 2) return lab52; if (k == 3) return lab53;
+  if (k == 4) return lab54; if (k == 5) return lab55; if (k == 6) return lab56; return lab57;
 }
 
 const TR = 1024;
@@ -151,6 +156,7 @@ let hiIdx1: i32 = -1; let hiPx1: f64 = NaN; let loIdx1: i32 = -1; let loPx1: f64
 let rOn = false; let rI0: i32 = 0; let rP0: f64 = 0.0; let rM: f64 = 0.0;
 let sOn = false; let sI0: i32 = 0; let sP0: f64 = 0.0; let sM: f64 = 0.0;
 let nTrapHi: i32 = 0; let nTrapLo: i32 = 0; let nConfUp: i32 = 0; let nConfDn: i32 = 0; let nStar: i32 = 0;
+let nHam: i32 = 0;
 let shCandles = true; let shStars = true; let shTrend = true; let shTraps = true; let shConf = true; let shDot = true; let shLines = true;
 let enDvAlert = true; let enEmaAlert = true; let tlTrendOnly = true;
 let tlLook: i32 = 600; let tlTol: f64 = 0.1;
@@ -389,8 +395,24 @@ function onBar(): void {
 
   const e21 = emaV[0];
   const e50 = emaV[1];
-  if (shConf && fHam == 1.0 && c < e21) cycBot = 1.0;
-  if (shConf && fShoot == 1.0 && c > e21) cycTop = 1.0;
+  cycTop = 0.0;
+  cycBot = 0.0;
+  if (shConf && range > 0.0) {
+    const bodyH = Math.abs(c - o);
+    const upWH = h - Math.max(o, c);
+    const loWH = Math.min(o, c) - l;
+    if (bodyH > 0.0 && loWH >= wickMult * bodyH && upWH <= smallWick / 100.0 * range && c < e21) {
+      cycBot = 1.0;
+      sb_clear(); sb_text("HAMMER");
+      hamLabAt(nHam).set(t, l - 0.45 * atr).text(str_tag_sb).color(GREEN);
+      nHam += 1;
+    } else if (bodyH > 0.0 && upWH >= wickMult * bodyH && loWH <= smallWick / 100.0 * range && c > e21) {
+      cycTop = 1.0;
+      sb_clear(); sb_text("INV HAMMER");
+      hamLabAt(nHam).set(t, h + 0.45 * atr).text(str_tag_sb).color(RED);
+      nHam += 1;
+    }
+  }
   let fE50 = 0.0;
   if (shEma50 && idx >= ema50Len && l <= e50 && h >= e50) fE50 = 1.0;
   const eTouch = l <= e21 && h >= e21;
@@ -409,8 +431,6 @@ function onBar(): void {
   out_hammer(l); out_shooting(h); out_doji(h); out_mstar(l); out_estar(h);
   out_g_cyc_top(cycTop);
   out_g_cyc_bot(cycBot);
-  out_cyc_top(h);
-  out_cyc_bot(l);
   out_g_ema50(fE50);
   out_cyc_ema50(e50);
   pClose = c;
