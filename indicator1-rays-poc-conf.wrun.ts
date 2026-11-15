@@ -44,12 +44,12 @@ param.number("w_poc", 10, { min: 0, max: 100, label: "Weight: POC inside the zon
 param.number("w_vd", 5, { min: 0, max: 100, label: "Weight: daily VWAP", when: "show_vd" });
 param.number("w_vw", 7, { min: 0, max: 100, label: "Weight: weekly VWAP", when: "show_vw" });
 param.number("w_vm", 8, { min: 0, max: 100, label: "Weight: monthly VWAP", when: "show_vm" });
-param("w_e1", 2, { min: 0, max: 100, description: "Weight: EMA 1" });
-param("w_e2", 3, { min: 0, max: 100, description: "Weight: EMA 2" });
-param("w_e3", 4, { min: 0, max: 100, description: "Weight: EMA 3" });
-param("w_e4", 5, { min: 0, max: 100, description: "Weight: EMA 4" });
-param("w_e5", 5, { min: 0, max: 100, description: "Weight: EMA 5" });
-param("w_e6", 6, { min: 0, max: 100, description: "Weight: EMA 6" });
+param.number("w_e1", 2, { min: 0, max: 100, label: "Weight: EMA 1", when: "show_e1" });
+param.number("w_e2", 3, { min: 0, max: 100, label: "Weight: EMA 2", when: "show_e2" });
+param.number("w_e3", 4, { min: 0, max: 100, label: "Weight: EMA 3", when: "show_e3" });
+param.number("w_e4", 5, { min: 0, max: 100, label: "Weight: EMA 4", when: "show_e4" });
+param.number("w_e5", 5, { min: 0, max: 100, label: "Weight: EMA 5", when: "show_e5" });
+param.number("w_e6", 6, { min: 0, max: 100, label: "Weight: EMA 6", when: "show_e6" });
 param.number("w_tl", 12, { min: 0, max: 100, label: "Weight: trendline at the zone", when: "show_tl" });
 param.number("w_tlb", 8, { min: 0, max: 100, label: "Weight: TL break/retest bonus", when: "show_tl" });
 
@@ -141,6 +141,24 @@ let nBuy: i32 = 0;
 let nSell: i32 = 0;
 let keepN: i32 = 4;
 let keepScore: f64 = 60.0;
+
+function vpPocIndex(cells: StaticArray<f64>, n: i32): i32 {
+  let best: i32 = -1;
+  let bestVolume: f64 = -1.0;
+  for (let i = 0; i + 3 < n; i += 4) {
+    const volume = cells[i + 2] + cells[i + 3];
+    if (volume > bestVolume) { bestVolume = volume; best = i; }
+  }
+  return best;
+}
+function vpPoc(cells: StaticArray<f64>, n: i32): f64 {
+  const i = vpPocIndex(cells, n);
+  return i < 0 ? NaN : (cells[i] + cells[i + 1]) / 2.0;
+}
+function vpPocVolume(cells: StaticArray<f64>, n: i32): f64 {
+  const i = vpPocIndex(cells, n);
+  return i < 0 ? NaN : cells[i + 2] + cells[i + 3];
+}
 
 function inBand(level: f64, lo: f64, hi: f64, tol: f64): bool {
   return !isNaN(level) && !isNaN(lo) && !isNaN(hi) && level >= lo - tol && level <= hi + tol;
