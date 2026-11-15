@@ -10,7 +10,8 @@ param.bool("show_candles", true, { label: "Highlight hammer, shooting star, doji
 param.bool("show_stars", true, { label: "Highlight morning star and evening star" });
 param.bool("show_trend", true, { label: "Auto trendline rays (never disappear)" });
 param.bool("show_traps", true, { label: "Trapped longs / shorts boxes with delta" });
-param.bool("show_conf", true, { label: "Confluence circles at swing points" });
+param.bool("show_conf", true, { label: "Hammer / inverted-hammer circles vs EMA 21" });
+param.bool("show_ema50", true, { label: "White circle when price touches EMA 50" });
 param.bool("show_dvwap_dot", true, { label: "Orange dot when daily VWAP is touched or smashed" });
 param.bool("show_lines", true, { label: "Show daily VWAP and EMA 21 lines" });
 param.bool("en_dvwap_alert", true, { label: "Alert: daily VWAP touched or smashed (once per 15m candle)" });
@@ -60,8 +61,10 @@ output("shooting", shape, overlay, { color: "#ff2bd6", shape_where: "g_shoot", s
 output("doji", shape, overlay, { color: "#ffffff", shape_where: "g_doji", shape: "diamond", location: "above_bar", glow: 8, description: "Doji" });
 output("mstar", shape, overlay, { color: "#39ff14", shape_where: "g_mstar", shape: "diamond", location: "below_bar", glow: 10, description: "Morning star (bottom reversal)" });
 output("estar", shape, overlay, { color: "#ff2bd6", shape_where: "g_estar", shape: "diamond", location: "above_bar", glow: 10, description: "Evening star (top reversal)" });
-output("cyc_top", shape, overlay, { color: "#ef4444", shape_where: "g_cyc_top", shape: "circle", location: "above_bar", glow: 16, description: "Possible top reversal (red circle)" });
-output("cyc_bot", shape, overlay, { color: "#22c55e", shape_where: "g_cyc_bot", shape: "circle", location: "below_bar", glow: 16, description: "Possible bottom reversal (green circle)" });
+output("cyc_top", shape, overlay, { color: "#ef4444", shape_where: "g_cyc_top", shape: "circle", location: "above_bar", glow: 16, description: "Inverted hammer above EMA 21" });
+output("cyc_bot", shape, overlay, { color: "#22c55e", shape_where: "g_cyc_bot", shape: "circle", location: "below_bar", glow: 16, description: "Hammer below EMA 21" });
+const gE50 = output("g_ema50", none);
+output("cyc_ema50", shape, overlay, { color: "#ffffff", shape_where: "g_ema50", shape: "circle", location: "above_bar", glow: 12, description: "EMA 50 touch" });
 
 plot.rays({ name: "tl", slots: 2, colors: ["#ff2bd6", "#00ffd5"], width: 1.5, line_style: "solid", opacity: 0.9, words: ["Resistance ray", "Support ray"], tooltip: "{{word}}", panel: "overlay" });
 plot.spans({ name: "trap", slots: 2, colors: ["#ff2bd6", "#00ffd5"], opacity: 0.22, border: { width: 1, opacity: 0.9 }, words: ["Trapped longs", "Trapped shorts"], tooltip: "{{word}} {{bottom}} to {{top}}", panel: "overlay" });
@@ -69,8 +72,9 @@ plot.marks({ name: "dvw", slots: 1, size: { law: "sqrt", unit: 1, scale: 10 }, o
 
 alert("dvwap_touch", { when: gDv, message: "{{symbol}}: daily VWAP touched or smashed at {{close}}", title: "Daily VWAP", description: "Price touched or crossed the daily VWAP (once per 15m candle)" });
 alert("ema21_touch", { when: gE21, message: "{{symbol}}: EMA 21 touched or smashed at {{close}}", title: "EMA 21", description: "Price touched or crossed the EMA 21 of the chart timeframe" });
-alert("cyc_top_alert", { when: gTop, message: "{{symbol}}: possible TOP reversal", title: "Top circle", description: "Red circle: confluence swing high" });
-alert("cyc_bot_alert", { when: gBot, message: "{{symbol}}: possible BOTTOM reversal", title: "Bottom circle", description: "Green circle: confluence swing low" });
+alert("cyc_top_alert", { when: gTop, message: "{{symbol}}: inverted hammer above EMA 21", title: "Red circle", description: "Inverted hammer while price is above EMA 21" });
+alert("cyc_bot_alert", { when: gBot, message: "{{symbol}}: hammer below EMA 21", title: "Green circle", description: "Hammer while price is below EMA 21" });
+alert("ema50_touch", { when: gE50, message: "{{symbol}}: EMA 50 touched", title: "EMA 50", description: "Price touched EMA 50" });
 
 string("tag", { max_bytes: 48 });
 handles.label({ size: 12 });
@@ -158,6 +162,8 @@ let wVwap: f64 = 12.0; let wEma: f64 = 8.0; let wOpen: f64 = 8.0; let wEq: f64 =
 let dotQty: f64 = 6.0;
 let cycTop = 0.0;
 let cycBot = 0.0;
+let shEma50 = true;
+let ema50Len: i32 = 50;
 
 function monthKeyOf(days: i32): i32 {
   const z: i32 = days + 719468;
@@ -206,11 +212,9 @@ function processPivot(isHigh: bool, px: f64, pIdx: i32, atrNow: f64, tNow: f64):
       sb_clear();
       sb_int(i32(s));
       if (isHigh) {
-        cycTop = 1.0;
         confDnLab(nConfDn).set(pt, px + 0.7 * atrNow).text(str_tag_sb).color(RED);
         nConfDn += 1;
       } else {
-        cycBot = 1.0;
         confUpLab(nConfUp).set(pt, px - 0.7 * atrNow).text(str_tag_sb).color(GREEN);
         nConfUp += 1;
       }
@@ -277,7 +281,7 @@ function onStart(): void {
   right = i32(p_swing_len());
   sw = new Swings(right, right);
   shCandles = pb_show_candles(); shStars = pb_show_stars(); shTrend = pb_show_trend(); shTraps = pb_show_traps();
-  shConf = pb_show_conf(); shDot = pb_show_dvwap_dot(); shLines = pb_show_lines();
+  shConf = pb_show_conf(); shDot = pb_show_dvwap_dot(); shLines = pb_show_lines(); shEma50 = pb_show_ema50();
   enDvAlert = pb_en_dvwap_alert(); enEmaAlert = pb_en_ema21_alert(); tlTrendOnly = pb_tl_trend_only();
   tlLook = i32(p_tl_lookback()); tlTol = p_tl_tol();
   dojiPct = p_doji_pct(); wickMult = p_wick_mult(); smallWick = p_small_wick(); candMinAtr = p_cand_min_atr(); trendN = i32(p_trend_n());
@@ -286,7 +290,8 @@ function onStart(): void {
   confTol = p_conf_tol(); confMin = p_conf_min();
   wVwap = p_w_vwap(); wEma = p_w_ema(); wOpen = p_w_open(); wEq = p_w_eq(); wTl = p_w_tl();
   dotQty = p_dot_qty();
-  emaK[0] = 2.0 / (f64(i32(p_ema1())) + 1.0); emaK[1] = 2.0 / (f64(i32(p_ema2())) + 1.0); emaK[2] = 2.0 / (f64(i32(p_ema3())) + 1.0);
+  ema50Len = i32(p_ema2());
+  emaK[0] = 2.0 / (f64(i32(p_ema1())) + 1.0); emaK[1] = 2.0 / (f64(ema50Len) + 1.0); emaK[2] = 2.0 / (f64(i32(p_ema3())) + 1.0);
   emaK[3] = 2.0 / (f64(i32(p_ema4())) + 1.0); emaK[4] = 2.0 / (f64(i32(p_ema5())) + 1.0); emaK[5] = 2.0 / (f64(i32(p_ema6())) + 1.0);
   emaWarm = i32(p_ema1());
 }
@@ -383,6 +388,11 @@ function onBar(): void {
   }
 
   const e21 = emaV[0];
+  const e50 = emaV[1];
+  if (shConf && fHam == 1.0 && c < e21) cycBot = 1.0;
+  if (shConf && fShoot == 1.0 && c > e21) cycTop = 1.0;
+  let fE50 = 0.0;
+  if (shEma50 && idx >= ema50Len && l <= e50 && h >= e50) fE50 = 1.0;
   const eTouch = l <= e21 && h >= e21;
   const fE = (eTouch && !prevETouch && enEmaAlert && idx >= emaWarm) ? 1.0 : 0.0;
   prevETouch = eTouch;
@@ -397,10 +407,12 @@ function onBar(): void {
   out_g_mstar(shStars ? fMs : 0.0);
   out_g_estar(shStars ? fEs : 0.0);
   out_hammer(l); out_shooting(h); out_doji(h); out_mstar(l); out_estar(h);
-  out_g_cyc_top(shConf ? cycTop : 0.0);
-  out_g_cyc_bot(shConf ? cycBot : 0.0);
+  out_g_cyc_top(cycTop);
+  out_g_cyc_bot(cycBot);
   out_cyc_top(h);
   out_cyc_bot(l);
+  out_g_ema50(fE50);
+  out_cyc_ema50(e50);
   pClose = c;
   idx += 1;
 }
