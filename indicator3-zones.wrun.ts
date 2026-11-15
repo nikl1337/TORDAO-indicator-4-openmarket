@@ -39,7 +39,7 @@ param.number("w_ema", 8, { min: 0, max: 100, step: 1, label: "Weight: each EMA",
 param.number("w_open", 8, { min: 0, max: 100, step: 1, label: "Weight: each open (daily, weekly, monthly)", when: "show_conf" });
 param.number("w_eq", 6, { min: 0, max: 100, step: 1, label: "Weight: each daily EQ (previous, current)", when: "show_conf" });
 param.number("w_tl", 14, { min: 0, max: 100, step: 1, label: "Weight: a trendline ray at the pivot", when: "show_conf" });
-param.number("dot_qty", 6, { min: 1, max: 16, step: 1, label: "Orange dot size (1 small, 16 huge)" });
+param.number("dot_qty", 6, { min: 1, max: 16, step: 1, label: "Orange dot size (1 small, 16 huge)", when: "show_dvwap_dot" });
 param.int("ema1", 21, { min: 2, max: 2000, label: "EMA 1 length (touch alert uses this one)" });
 param.int("ema2", 50, { min: 2, max: 2000, label: "EMA 2 length" });
 param.int("ema3", 144, { min: 2, max: 2000, label: "EMA 3 length" });
