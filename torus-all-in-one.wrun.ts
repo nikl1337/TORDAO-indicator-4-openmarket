@@ -1,2 +1,1 @@
-//@lang=wrun-ts
-// PLACEHOLDER_WILL_REPLACE
+@/tmp/only_content.txt
