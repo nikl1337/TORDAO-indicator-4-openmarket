@@ -11,12 +11,12 @@ param.bool("show_htf", true, { label: "HTF trendlines 2G+2R" });
 
 page("Logic");
 param.int("swing_len", 3, { min: 2, max: 30, label: "Swing length" });
-param.number("flag_pole_atr", 1.8, { min: 0.8, max: 6, step: 0.1, label: "Flag min pole ATR" });
-param.int("flag_max_bars", 400, { min: 100, max: 600, label: "Flag lookback" });
-param.number("fib_tol", 0.05, { min: 0.01, max: 0.15, step: 0.01, label: "Fib ratio tolerance" });
-param.int("ch_lb1", 34, { min: 10, max: 200, label: "Channel 1 LB" });
-param.int("ch_lb2", 89, { min: 20, max: 300, label: "Channel 2 LB" });
-param.int("ch_lb3", 200, { min: 50, max: 337, label: "Channel 3 LB" });
+param.number("flag_pole_atr", 1.8, { min: 0.8, max: 6, step: 0.1, label: "Flag min pole ATR", when: "show_flags" });
+param.int("flag_max_bars", 400, { min: 100, max: 600, label: "Flag lookback", when: "show_flags" });
+param.number("fib_tol", 0.05, { min: 0.01, max: 0.15, step: 0.01, label: "Fib ratio tolerance", when: "show_harm" });
+param.int("ch_lb1", 34, { min: 10, max: 200, label: "Channel 1 LB", when: "show_ch" });
+param.int("ch_lb2", 89, { min: 20, max: 300, label: "Channel 2 LB", when: "show_ch" });
+param.int("ch_lb3", 200, { min: 50, max: 337, label: "Channel 3 LB", when: "show_ch" });
 
 const gBat = output("g_bat", none);
 const gFly = output("g_fly", none);
@@ -91,7 +91,7 @@ let prevC: f64 = NaN;
 let bfU = new Array<f64>(3); let bfM = new Array<f64>(3); let bfL = new Array<f64>(3); let bfAge = new Array<i32>(3);
 let rfU = new Array<f64>(3); let rfM = new Array<f64>(3); let rfL = new Array<f64>(3); let rfAge = new Array<i32>(3);
 
-let sw: Swings;
+let sw = new Swings(3, 3);
 let right: i32 = 3;
 let flagPoleAtr: f64 = 1.8;
 let flagMaxBars: i32 = 400;
@@ -178,10 +178,8 @@ function onBar(): void {
   if (fN < FMAX) fN += 1;
 
   sw.update(h, l);
-  const sh = sw.high();
-  const sl = sw.low();
-  if (!isNaN(sh)) pushPivot(sh, 1);
-  if (!isNaN(sl)) pushPivot(sl, -1);
+  if (sw.newHigh()) pushPivot(sw.lastHigh(), 1);
+  if (sw.newLow()) pushPivot(sw.lastLow(), -1);
 
   let batFire = false; let flyFire = false; let abcdFire = false; let harmRatio = NaN;
   if (shHarm && pivN >= 5) {
