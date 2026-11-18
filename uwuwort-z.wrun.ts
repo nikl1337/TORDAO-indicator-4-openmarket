@@ -1,48 +1,37 @@
 //@lang=wrun-ts
-// UWUWORT-Z — history-safe: module writes only in onBar body
-// Fixed-endpoint zigzag on near/confirmed harmonics (10% fib)
-// EMA 21/100/144/360/667/800; red box @360 touch, green box @800 touch
-// POC/VAH/VAL, extremes ±0.2%, 4 equalizer lines
+// UWUWORT-Z — kit-based (Ema + Swings) like working TORDAO scripts
+// Harmonics near/confirmed 10% fib, fixed-endpoint zigzag
+// EMA 21/100/144/360/667/800; red box @360 touch, green @800 touch
+// POC mid, VAH/VAL, extremes ±0.2%, equalizer lines
 
 page("Display");
-param.bool("show_zz", true, { label: "Pattern zigzag (fixed endpoints)" });
-param.bool("show_harm", true, { label: "Harmonics near + confirmed (10% tol)" });
+param.bool("show_zz", true, { label: "Pattern zigzag" });
+param.bool("show_harm", true, { label: "Harmonics 10% tol" });
 param.bool("show_ext", true, { label: "Extreme ±0.2%" });
-param.bool("show_poc", true, { label: "Yellow POC + mid" });
+param.bool("show_poc", true, { label: "POC mid" });
 param.bool("show_va", true, { label: "VAH / VAL" });
 param.bool("show_eq", true, { label: "Equalizer 2G / 2R" });
-param.bool("show_ema", true, { label: "EMA 21/100/144/360/667/800" });
-param.bool("show_ema_box", true, { label: "Boxes: red@360 touch, green@800 touch" });
+param.bool("show_ema", true, { label: "EMA ribbon" });
+param.bool("show_ema_box", true, { label: "Boxes red@360 green@800" });
 
 page("Logic");
-param.int("swing_len", 3, { min: 2, max: 3, label: "Swing length (fixed 3 for window)" });
-param.number("fib_tol", 0.10, { min: 0.02, max: 0.25, step: 0.01, label: "Fib tol 10%", when: "show_harm" });
+param.int("swing_len", 3, { min: 2, max: 12, label: "Swing length each side" });
+param.number("fib_tol", 0.10, { min: 0.02, max: 0.25, step: 0.01, label: "Fib tol", when: "show_harm" });
 param.int("poc_lb", 96, { min: 16, max: 300, label: "POC lookback", when: "show_poc" });
 param.number("va_pct", 70, { min: 50, max: 90, step: 1, label: "VA %", when: "show_va" });
 param.int("keep_bars", 200, { min: 40, max: 500, label: "Keep pattern bars" });
 
 plot.rays({
-  name: "zz",
-  slots: 4,
+  name: "zz", slots: 4,
   colors: ["#a78bfa", "#c4b5fd", "#a78bfa", "#c4b5fd"],
-  width: 2,
-  line_style: "solid",
-  opacity: 0.95,
-  words: ["leg1", "leg2", "leg3", "leg4"],
-  tooltip: "{{word}}",
-  panel: "overlay"
+  width: 2, line_style: "solid", opacity: 0.95,
+  words: ["leg1", "leg2", "leg3", "leg4"], tooltip: "{{word}}", panel: "overlay"
 });
-
 plot.rays({
-  name: "eq",
-  slots: 4,
+  name: "eq", slots: 4,
   colors: ["#22c55e", "#4ade80", "#ef4444", "#f87171"],
-  width: 1.5,
-  line_style: "solid",
-  opacity: 0.9,
-  words: ["EQ up 1", "EQ up 2", "EQ down 1", "EQ down 2"],
-  tooltip: "{{word}}",
-  panel: "overlay"
+  width: 1.5, line_style: "solid", opacity: 0.9,
+  words: ["EQ up 1", "EQ up 2", "EQ down 1", "EQ down 2"], tooltip: "{{word}}", panel: "overlay"
 });
 
 output("ext_hi", line, overlay, { color: "#ff2bd6", width: 2, description: "High +0.2%" });
@@ -55,13 +44,6 @@ output("ema360", line, overlay, { color: "#f97316", width: 2, description: "EMA 
 output("ema667", line, overlay, { color: "#38bdf8", width: 1, description: "EMA 667" });
 output("ema800", line, overlay, { color: "#22c55e", width: 2, description: "EMA 800" });
 
-const pocTop = output("poc_top", none);
-const pocBot = output("poc_bot", none);
-const pocLive = output("poc_live", none);
-box("poc_zone", {
-  top: pocTop, bottom: pocBot, when: pocLive,
-  color: "#facc15", opacity: 0.18, borderColor: "#facc15", borderWidth: 1, z: 2
-});
 output("poc_mid", line, overlay, { color: "#facc15", width: 2, description: "POC mid" });
 output("vah", line, overlay, { color: "#ff2bd6", width: 1, line_style: "dashed", description: "VAH" });
 output("val", line, overlay, { color: "#00ffd5", width: 1, line_style: "dashed", description: "VAL" });
@@ -99,10 +81,20 @@ output("done", shape, overlay, { color: "#a855f7", shape_where: "g_done", shape:
 output("near", shape, overlay, { color: "#c4b5fd", shape_where: "g_near", shape: "circle", location: "below_bar", glow: 10, description: "NEAR" });
 output("pname", shape, overlay, { color: "#fbbf24", shape_where: "g_name", shape: "diamond", location: "above_bar", glow: 12, description: "Pattern" });
 
-let typSum: f64 = 0.0;
-let typN: i32 = 0;
-let hiSum: f64 = 0.0;
-let loSum: f64 = 0.0;
+let sw = new Swings(3, 3);
+let e21 = new Ema(21);
+let e100 = new Ema(100);
+let e144 = new Ema(144);
+let e360 = new Ema(360);
+let e667 = new Ema(667);
+let e800 = new Ema(800);
+
+let right: i32 = 3;
+let fibTol: f64 = 0.10;
+let pocLb: i32 = 96;
+let vaPct: f64 = 70.0;
+let keepBars: i32 = 200;
+let idx: i32 = 0;
 
 let p0px: f64 = NaN; let p0t: f64 = 0.0; let p0i: i32 = 0;
 let p1px: f64 = NaN; let p1t: f64 = 0.0; let p1i: i32 = 0;
@@ -134,24 +126,10 @@ let eqU1a: f64 = NaN; let eqU1at: f64 = 0.0; let eqU1b: f64 = NaN; let eqU1bt: f
 let eqD0a: f64 = NaN; let eqD0at: f64 = 0.0; let eqD0b: f64 = NaN; let eqD0bt: f64 = 0.0;
 let eqD1a: f64 = NaN; let eqD1at: f64 = 0.0; let eqD1b: f64 = NaN; let eqD1bt: f64 = 0.0;
 
-let idx: i32 = 0;
-let fibTol: f64 = 0.10;
-let pocLb: i32 = 96;
-let vaPct: f64 = 70.0;
-let keepBars: i32 = 200;
-
-let sh0: f64 = NaN; let sh1: f64 = NaN; let sh2: f64 = NaN; let sh3: f64 = NaN;
-let sh4: f64 = NaN; let sh5: f64 = NaN; let sh6: f64 = NaN;
-let sl0: f64 = NaN; let sl1: f64 = NaN; let sl2: f64 = NaN; let sl3: f64 = NaN;
-let sl4: f64 = NaN; let sl5: f64 = NaN; let sl6: f64 = NaN;
-let swN: i32 = 0;
-
-let e21: f64 = NaN;
-let e100: f64 = NaN;
-let e144: f64 = NaN;
-let e360: f64 = NaN;
-let e667: f64 = NaN;
-let e800: f64 = NaN;
+let typSum: f64 = 0.0;
+let typN: i32 = 0;
+let hiSum: f64 = 0.0;
+let loSum: f64 = 0.0;
 
 function inR(x: f64, a: f64, b: f64, tol: f64): bool {
   const lo = a < b ? a : b;
@@ -160,20 +138,28 @@ function inR(x: f64, a: f64, b: f64, tol: f64): bool {
 }
 
 function onStart(): void {
+  right = i32(p_swing_len());
+  if (right < 2) right = 2;
+  if (right > 12) right = 12;
+  sw = new Swings(right, right);
+  e21 = new Ema(21);
+  e100 = new Ema(100);
+  e144 = new Ema(144);
+  e360 = new Ema(360);
+  e667 = new Ema(667);
+  e800 = new Ema(800);
   fibTol = p_fib_tol();
   pocLb = i32(p_poc_lb());
   vaPct = p_va_pct();
   keepBars = i32(p_keep_bars());
   pivN = 0;
   idx = 0;
-  swN = 0;
   typSum = 0.0; typN = 0; hiSum = 0.0; loSum = 0.0;
   lastHi = NaN; lastLo = NaN;
   patOn = false; patDone = false; patN = 0; patAge = 0;
   loA = NaN; loB = NaN; hiA = NaN; hiB = NaN;
   eqU0a = NaN; eqU0b = NaN; eqU1a = NaN; eqU1b = NaN;
   eqD0a = NaN; eqD0b = NaN; eqD1a = NaN; eqD1b = NaN;
-  e21 = NaN; e100 = NaN; e144 = NaN; e360 = NaN; e667 = NaN; e800 = NaN;
   p0px = NaN; p1px = NaN; p2px = NaN; p3px = NaN; p4px = NaN; p5px = NaN;
   a0px = NaN; a1px = NaN; a2px = NaN; a3px = NaN; a4px = NaN;
   a0i = -1; a1i = -1; a2i = -1; a3i = -1; a4i = -1;
@@ -194,105 +180,74 @@ function onBar(): void {
   const shEma = pb_show_ema();
   const shBox = pb_show_ema_box();
 
-  const k21 = 2.0 / 22.0;
-  const k100 = 2.0 / 101.0;
-  const k144 = 2.0 / 145.0;
-  const k360 = 2.0 / 361.0;
-  const k667 = 2.0 / 668.0;
-  const k800 = 2.0 / 801.0;
-  if (isNaN(e21)) { e21 = c; e100 = c; e144 = c; e360 = c; e667 = c; e800 = c; }
-  else {
-    e21 = e21 + k21 * (c - e21);
-    e100 = e100 + k100 * (c - e100);
-    e144 = e144 + k144 * (c - e144);
-    e360 = e360 + k360 * (c - e360);
-    e667 = e667 + k667 * (c - e667);
-    e800 = e800 + k800 * (c - e800);
-  }
-  out_ema21(shEma ? e21 : NaN);
-  out_ema100(shEma ? e100 : NaN);
-  out_ema144(shEma ? e144 : NaN);
-  out_ema360(shEma ? e360 : NaN);
-  out_ema667(shEma ? e667 : NaN);
-  out_ema800(shEma ? e800 : NaN);
+  const v21 = e21.update(c);
+  const v100 = e100.update(c);
+  const v144 = e144.update(c);
+  const v360 = e360.update(c);
+  const v667 = e667.update(c);
+  const v800 = e800.update(c);
+  out_ema21(shEma ? v21 : NaN);
+  out_ema100(shEma ? v100 : NaN);
+  out_ema144(shEma ? v144 : NaN);
+  out_ema360(shEma ? v360 : NaN);
+  out_ema667(shEma ? v667 : NaN);
+  out_ema800(shEma ? v800 : NaN);
 
-  const near360 = !isNaN(e360) && l <= e360 && h >= e360;
-  const near800 = !isNaN(e800) && l <= e800 && h >= e800;
-  if (shBox && near360) {
-    const band = Math.abs(e360) * 0.001;
-    out_b360_t(e360 + band);
-    out_b360_b(e360 - band);
+  if (shBox && !isNaN(v360) && l <= v360 && h >= v360) {
+    const band = Math.abs(v360) * 0.001;
+    out_b360_t(v360 + band);
+    out_b360_b(v360 - band);
     out_b360_l(1.0);
   } else {
     out_b360_t(NaN); out_b360_b(NaN); out_b360_l(0.0);
   }
-  if (shBox && near800) {
-    const band = Math.abs(e800) * 0.001;
-    out_b800_t(e800 + band);
-    out_b800_b(e800 - band);
+  if (shBox && !isNaN(v800) && l <= v800 && h >= v800) {
+    const band = Math.abs(v800) * 0.001;
+    out_b800_t(v800 + band);
+    out_b800_b(v800 - band);
     out_b800_l(1.0);
   } else {
     out_b800_t(NaN); out_b800_b(NaN); out_b800_l(0.0);
   }
 
-  sh6 = sh5; sh5 = sh4; sh4 = sh3; sh3 = sh2; sh2 = sh1; sh1 = sh0; sh0 = h;
-  sl6 = sl5; sl5 = sl4; sl4 = sl3; sl3 = sl2; sl2 = sl1; sl1 = sl0; sl0 = l;
-  if (swN < 7) swN += 1;
-
-  const typ = (h + l + c) / 3.0;
-  typSum += typ;
-  hiSum += h;
-  loSum += l;
-  typN += 1;
-  if (typN > pocLb) {
-    const kk = f64(pocLb) / f64(typN);
-    typSum *= kk;
-    hiSum *= kk;
-    loSum *= kk;
-    typN = pocLb;
+  sw.update(h, l);
+  if (sw.newHigh()) {
+    const px = sw.lastHigh();
+    lastHi = px;
+    p0px = p1px; p0t = p1t; p0i = p1i;
+    p1px = p2px; p1t = p2t; p1i = p2i;
+    p2px = p3px; p2t = p3t; p2i = p3i;
+    p3px = p4px; p3t = p4t; p3i = p4i;
+    p4px = p5px; p4t = p5t; p4i = p5i;
+    p5px = px; p5t = t; p5i = idx - right;
+    if (pivN < 6) pivN += 1;
+    if (!isNaN(hiB) && !isNaN(hiA) && px < hiB) {
+      eqD1a = hiA; eqD1at = hiAT; eqD1b = hiB; eqD1bt = hiBT;
+    }
+    if (!isNaN(hiB) && px < hiB) {
+      eqD0a = hiB; eqD0at = hiBT; eqD0b = px; eqD0bt = t;
+    }
+    hiA = hiB; hiAT = hiBT;
+    hiB = px; hiBT = t;
   }
-
-  if (swN >= 7) {
-    const cH = sh3;
-    const cL = sl3;
-    const isHi = cH >= sh0 && cH >= sh1 && cH >= sh2 && cH >= sh4 && cH >= sh5 && cH >= sh6 && cH > sh2 && cH > sh4;
-    const isLo = cL <= sl0 && cL <= sl1 && cL <= sl2 && cL <= sl4 && cL <= sl5 && cL <= sl6 && cL < sl2 && cL < sl4;
-    if (isHi) {
-      lastHi = cH;
-      p0px = p1px; p0t = p1t; p0i = p1i;
-      p1px = p2px; p1t = p2t; p1i = p2i;
-      p2px = p3px; p2t = p3t; p2i = p3i;
-      p3px = p4px; p3t = p4t; p3i = p4i;
-      p4px = p5px; p4t = p5t; p4i = p5i;
-      p5px = cH; p5t = t; p5i = idx - 3;
-      if (pivN < 6) pivN += 1;
-      if (!isNaN(hiB) && !isNaN(hiA) && cH < hiB) {
-        eqD1a = hiA; eqD1at = hiAT; eqD1b = hiB; eqD1bt = hiBT;
-      }
-      if (!isNaN(hiB) && cH < hiB) {
-        eqD0a = hiB; eqD0at = hiBT; eqD0b = cH; eqD0bt = t;
-      }
-      hiA = hiB; hiAT = hiBT;
-      hiB = cH; hiBT = t;
+  if (sw.newLow()) {
+    const px = sw.lastLow();
+    lastLo = px;
+    p0px = p1px; p0t = p1t; p0i = p1i;
+    p1px = p2px; p1t = p2t; p1i = p2i;
+    p2px = p3px; p2t = p3t; p2i = p3i;
+    p3px = p4px; p3t = p4t; p3i = p4i;
+    p4px = p5px; p4t = p5t; p4i = p5i;
+    p5px = px; p5t = t; p5i = idx - right;
+    if (pivN < 6) pivN += 1;
+    if (!isNaN(loB) && !isNaN(loA) && px > loB) {
+      eqU1a = loA; eqU1at = loAT; eqU1b = loB; eqU1bt = loBT;
     }
-    if (isLo) {
-      lastLo = cL;
-      p0px = p1px; p0t = p1t; p0i = p1i;
-      p1px = p2px; p1t = p2t; p1i = p2i;
-      p2px = p3px; p2t = p3t; p2i = p3i;
-      p3px = p4px; p3t = p4t; p3i = p4i;
-      p4px = p5px; p4t = p5t; p4i = p5i;
-      p5px = cL; p5t = t; p5i = idx - 3;
-      if (pivN < 6) pivN += 1;
-      if (!isNaN(loB) && !isNaN(loA) && cL > loB) {
-        eqU1a = loA; eqU1at = loAT; eqU1b = loB; eqU1bt = loBT;
-      }
-      if (!isNaN(loB) && cL > loB) {
-        eqU0a = loB; eqU0at = loBT; eqU0b = cL; eqU0bt = t;
-      }
-      loA = loB; loAT = loBT;
-      loB = cL; loBT = t;
+    if (!isNaN(loB) && px > loB) {
+      eqU0a = loB; eqU0at = loBT; eqU0b = px; eqU0bt = t;
     }
+    loA = loB; loAT = loBT;
+    loB = px; loBT = t;
   }
 
   if (shHarm && pivN >= 4) {
@@ -315,9 +270,8 @@ function onBar(): void {
       const rBC = bc / ab;
       const rCD = cd / ab;
       const rYZ = cd / bc;
-      const abcd = inR(rBC, 0.382, 0.886, fibTol) && inR(rCD, 0.90, 1.272, fibTol);
-      const wxy = inR(rBC, 0.382, 1.272, fibTol) && inR(rYZ, 0.618, 1.618, fibTol);
-      if (abcd || wxy) {
+      if ((inR(rBC, 0.382, 0.886, fibTol) && inR(rCD, 0.90, 1.272, fibTol)) ||
+          (inR(rBC, 0.382, 1.272, fibTol) && inR(rYZ, 0.618, 1.618, fibTol))) {
         patOn = true; patDone = true; patAge = 0; patN = 4;
         a0px = A; a0t = At; a0i = Ai;
         a1px = B; a1t = Bt; a1i = Bi;
@@ -388,14 +342,12 @@ function onBar(): void {
       const rAB = ab / xa;
       const rBC = bc / ab;
       const rXC = xc / xa;
-      let near = false;
+      let near = inR(rBC, 0.382, 0.886, fibTol);
       if (inR(rAB, 0.618, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol)) near = true;
       else if (inR(rAB, 0.382, 0.50, fibTol) && inR(rBC, 0.382, 0.886, fibTol)) near = true;
       else if (inR(rAB, 0.786, 0.786, fibTol) && inR(rBC, 0.382, 0.886, fibTol)) near = true;
-      else if (inR(rAB, 0.382, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol)) near = true;
       else if (inR(rXC, 0.786, 0.886, fibTol) && inR(rBC, 1.13, 1.414, fibTol)) near = true;
       else if (inR(rXC, 1.13, 1.618, fibTol)) near = true;
-      else if (inR(rBC, 0.382, 0.886, fibTol)) near = true;
       if (near) {
         patOn = true; patDone = false; patAge = 0; patN = 4;
         a0px = X; a0t = Xt; a0i = Xi;
@@ -409,11 +361,7 @@ function onBar(): void {
 
   if (patOn) {
     patAge += 1;
-    if (patAge > keepBars) {
-      patOn = false;
-      patDone = false;
-      patN = 0;
-    }
+    if (patAge > keepBars) { patOn = false; patDone = false; patN = 0; }
   }
 
   out_zz_ray_at(0, NaN, NaN, 0.0, 0.0, 0, 0, 0);
@@ -431,16 +379,16 @@ function onBar(): void {
   let showDone = false; let showNear = false; let showName = false;
   if (shHarm && patOn) {
     if (patN == 5) {
-      if (idx == a0i + 3) showX = true;
-      if (idx == a1i + 3) showA = true;
-      if (idx == a2i + 3) showB = true;
-      if (idx == a3i + 3) showC = true;
-      if (idx == a4i + 3) { showD = true; showName = true; if (patDone) showDone = true; else showNear = true; }
+      if (idx == a0i + right) showX = true;
+      if (idx == a1i + right) showA = true;
+      if (idx == a2i + right) showB = true;
+      if (idx == a3i + right) showC = true;
+      if (idx == a4i + right) { showD = true; showName = true; if (patDone) showDone = true; else showNear = true; }
     } else if (patN == 4) {
-      if (idx == a0i + 3) showA = true;
-      if (idx == a1i + 3) showB = true;
-      if (idx == a2i + 3) showC = true;
-      if (idx == a3i + 3) { showD = true; showName = true; if (patDone) showDone = true; else showNear = true; }
+      if (idx == a0i + right) showA = true;
+      if (idx == a1i + right) showB = true;
+      if (idx == a2i + right) showC = true;
+      if (idx == a3i + right) { showD = true; showName = true; if (patDone) showDone = true; else showNear = true; }
     }
   }
   out_g_a(showA ? 1.0 : 0.0);
@@ -466,29 +414,22 @@ function onBar(): void {
     if (!isNaN(eqD1a) && !isNaN(eqD1b)) out_eq_ray_at(3, eqD1a, eqD1b, eqD1at, eqD1bt, 3, 3, 1);
   }
 
+  const typ = (h + l + c) / 3.0;
+  typSum += typ; hiSum += h; loSum += l; typN += 1;
+  if (typN > pocLb) {
+    const kk = f64(pocLb) / f64(typN);
+    typSum *= kk; hiSum *= kk; loSum *= kk; typN = pocLb;
+  }
   if ((shPoc || shVa) && typN >= 8) {
     const mid = typSum / f64(typN);
     const avgH = hiSum / f64(typN);
     const avgL = loSum / f64(typN);
-    const half = (avgH - avgL) * 0.15;
-    if (shPoc) {
-      out_poc_top(mid + half);
-      out_poc_bot(mid - half);
-      out_poc_live(1.0);
-      out_poc_mid(mid);
-    } else {
-      out_poc_top(NaN); out_poc_bot(NaN); out_poc_live(0.0); out_poc_mid(NaN);
-    }
+    if (shPoc) out_poc_mid(mid); else out_poc_mid(NaN);
     const vaHalf = (avgH - avgL) * (vaPct / 200.0);
-    if (shVa) {
-      out_vah(mid + vaHalf);
-      out_val(mid - vaHalf);
-    } else {
-      out_vah(NaN); out_val(NaN);
-    }
+    if (shVa) { out_vah(mid + vaHalf); out_val(mid - vaHalf); }
+    else { out_vah(NaN); out_val(NaN); }
   } else {
-    out_poc_top(NaN); out_poc_bot(NaN); out_poc_live(0.0); out_poc_mid(NaN);
-    out_vah(NaN); out_val(NaN);
+    out_poc_mid(NaN); out_vah(NaN); out_val(NaN);
   }
 
   idx += 1;
