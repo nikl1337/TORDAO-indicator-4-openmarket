@@ -1,7 +1,7 @@
 //@lang=wrun-ts
-// UWUWORT-Z — kit-based (Ema + Swings) like working TORDAO scripts
-// Harmonics near/confirmed 10% fib, fixed-endpoint zigzag
-// EMA 21/100/144/360/667/800; red box @360 touch, green @800 touch
+// UWUWORT-Z — kit-based (Ema + Swings)
+// Harmonics named by common name; fixed-endpoint segments between pivots
+// EMA 21/100/144/360/667/800; red box+square @360, green @800
 // POC mid, VAH/VAL, extremes ±0.2%, equalizer lines
 
 page("Display");
@@ -25,7 +25,7 @@ plot.rays({
   name: "zz", slots: 4,
   colors: ["#a78bfa", "#c4b5fd", "#a78bfa", "#c4b5fd"],
   width: 2, line_style: "solid", opacity: 0.95,
-  words: ["leg1", "leg2", "leg3", "leg4"], tooltip: "{{word}}", panel: "overlay"
+  words: ["ABCD", "Gartley", "Bat", "Butterfly"], tooltip: "{{word}}", panel: "overlay"
 });
 plot.rays({
   name: "eq", slots: 4,
@@ -53,14 +53,14 @@ const b360b = output("b360_b", none);
 const b360l = output("b360_l", none);
 box("ema360_touch", {
   top: b360t, bottom: b360b, when: b360l,
-  color: "#ef4444", opacity: 0.35, borderColor: "#ef4444", borderWidth: 1, z: 3
+  color: "#ef4444", opacity: 0.55, borderColor: "#ef4444", borderWidth: 2, z: 5
 });
 const b800t = output("b800_t", none);
 const b800b = output("b800_b", none);
 const b800l = output("b800_l", none);
 box("ema800_touch", {
   top: b800t, bottom: b800b, when: b800l,
-  color: "#22c55e", opacity: 0.35, borderColor: "#22c55e", borderWidth: 1, z: 3
+  color: "#22c55e", opacity: 0.55, borderColor: "#22c55e", borderWidth: 2, z: 5
 });
 
 const gA = output("g_a", none);
@@ -80,6 +80,28 @@ output("lab_x", shape, overlay, { color: "#38bdf8", shape_where: "g_x", shape: "
 output("done", shape, overlay, { color: "#a855f7", shape_where: "g_done", shape: "circle", location: "above_bar", glow: 18, description: "CONFIRMED" });
 output("near", shape, overlay, { color: "#c4b5fd", shape_where: "g_near", shape: "circle", location: "below_bar", glow: 10, description: "NEAR" });
 output("pname", shape, overlay, { color: "#fbbf24", shape_where: "g_name", shape: "diamond", location: "above_bar", glow: 12, description: "Pattern" });
+
+const gAbcd = output("g_abcd", none);
+const gGart = output("g_gart", none);
+const gBat = output("g_bat", none);
+const gFly = output("g_fly", none);
+const gCrab = output("g_crab", none);
+const gCyph = output("g_cyph", none);
+const gShark = output("g_shark", none);
+const gWxy = output("g_wxy", none);
+output("n_abcd", shape, overlay, { color: "#fbbf24", shape_where: "g_abcd", shape: "flag", location: "above_bar", glow: 14, description: "ABCD" });
+output("n_gart", shape, overlay, { color: "#fbbf24", shape_where: "g_gart", shape: "flag", location: "above_bar", glow: 14, description: "Gartley" });
+output("n_bat", shape, overlay, { color: "#fbbf24", shape_where: "g_bat", shape: "flag", location: "above_bar", glow: 14, description: "Bat" });
+output("n_fly", shape, overlay, { color: "#fbbf24", shape_where: "g_fly", shape: "flag", location: "above_bar", glow: 14, description: "Butterfly" });
+output("n_crab", shape, overlay, { color: "#fbbf24", shape_where: "g_crab", shape: "flag", location: "above_bar", glow: 14, description: "Crab" });
+output("n_cyph", shape, overlay, { color: "#fbbf24", shape_where: "g_cyph", shape: "flag", location: "above_bar", glow: 14, description: "Cypher" });
+output("n_shark", shape, overlay, { color: "#fbbf24", shape_where: "g_shark", shape: "flag", location: "above_bar", glow: 14, description: "Shark" });
+output("n_wxy", shape, overlay, { color: "#fbbf24", shape_where: "g_wxy", shape: "flag", location: "above_bar", glow: 14, description: "WXY" });
+
+const gT360 = output("g_t360", none);
+const gT800 = output("g_t800", none);
+output("mark360", shape, overlay, { color: "#ef4444", shape_where: "g_t360", shape: "square", location: "above_bar", glow: 16, description: "EMA360 touch" });
+output("mark800", shape, overlay, { color: "#22c55e", shape_where: "g_t800", shape: "square", location: "below_bar", glow: 16, description: "EMA800 touch" });
 
 let sw = new Swings(3, 3);
 let e21 = new Ema(21);
@@ -110,6 +132,7 @@ let a2px: f64 = NaN; let a2t: f64 = 0.0; let a2i: i32 = -1;
 let a3px: f64 = NaN; let a3t: f64 = 0.0; let a3i: i32 = -1;
 let a4px: f64 = NaN; let a4t: f64 = 0.0; let a4i: i32 = -1;
 let patN: i32 = 0;
+let patKind: i32 = 0;
 let patOn: bool = false;
 let patDone: bool = false;
 let patAge: i32 = 0;
@@ -156,7 +179,7 @@ function onStart(): void {
   idx = 0;
   typSum = 0.0; typN = 0; hiSum = 0.0; loSum = 0.0;
   lastHi = NaN; lastLo = NaN;
-  patOn = false; patDone = false; patN = 0; patAge = 0;
+  patOn = false; patDone = false; patN = 0; patAge = 0; patKind = 0;
   loA = NaN; loB = NaN; hiA = NaN; hiB = NaN;
   eqU0a = NaN; eqU0b = NaN; eqU1a = NaN; eqU1b = NaN;
   eqD0a = NaN; eqD0b = NaN; eqD1a = NaN; eqD1b = NaN;
@@ -193,21 +216,27 @@ function onBar(): void {
   out_ema667(shEma ? v667 : NaN);
   out_ema800(shEma ? v800 : NaN);
 
-  if (shBox && !isNaN(v360) && l <= v360 && h >= v360) {
-    const band = Math.abs(v360) * 0.001;
+  const touch360 = shBox && !isNaN(v360) && l <= v360 * 1.001 && h >= v360 * 0.999;
+  const touch800 = shBox && !isNaN(v800) && l <= v800 * 1.001 && h >= v800 * 0.999;
+  if (touch360) {
+    const band = Math.max(Math.abs(v360) * 0.003, (h - l) * 0.5);
     out_b360_t(v360 + band);
     out_b360_b(v360 - band);
     out_b360_l(1.0);
+    out_g_t360(1.0);
   } else {
     out_b360_t(NaN); out_b360_b(NaN); out_b360_l(0.0);
+    out_g_t360(0.0);
   }
-  if (shBox && !isNaN(v800) && l <= v800 && h >= v800) {
-    const band = Math.abs(v800) * 0.001;
+  if (touch800) {
+    const band = Math.max(Math.abs(v800) * 0.003, (h - l) * 0.5);
     out_b800_t(v800 + band);
     out_b800_b(v800 - band);
     out_b800_l(1.0);
+    out_g_t800(1.0);
   } else {
     out_b800_t(NaN); out_b800_b(NaN); out_b800_l(0.0);
+    out_g_t800(0.0);
   }
 
   sw.update(h, l);
@@ -270,9 +299,11 @@ function onBar(): void {
       const rBC = bc / ab;
       const rCD = cd / ab;
       const rYZ = cd / bc;
-      if ((inR(rBC, 0.382, 0.886, fibTol) && inR(rCD, 0.90, 1.272, fibTol)) ||
-          (inR(rBC, 0.382, 1.272, fibTol) && inR(rYZ, 0.618, 1.618, fibTol))) {
+      const isAbcd = inR(rBC, 0.382, 0.886, fibTol) && inR(rCD, 0.90, 1.272, fibTol);
+      const isWxy = inR(rBC, 0.382, 1.272, fibTol) && inR(rYZ, 0.618, 1.618, fibTol);
+      if (isAbcd || isWxy) {
         patOn = true; patDone = true; patAge = 0; patN = 4;
+        patKind = isAbcd ? 1 : 8;
         a0px = A; a0t = At; a0i = Ai;
         a1px = B; a1t = Bt; a1i = Bi;
         a2px = C; a2t = Ct; a2i = Ci;
@@ -303,15 +334,15 @@ function onBar(): void {
       const rXD = xd / xa;
       const rXC = xc / xa;
       const rCD = cd > 0.0 ? cd / bc : NaN;
-      let hit = false;
-      if (inR(rAB, 0.618, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 0.786, 0.786, fibTol)) hit = true;
-      else if (inR(rAB, 0.382, 0.50, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 0.886, 0.886, fibTol)) hit = true;
-      else if (inR(rAB, 0.786, 0.786, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 1.272, 1.618, fibTol)) hit = true;
-      else if (inR(rAB, 0.382, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 1.618, 1.618, fibTol)) hit = true;
-      else if (inR(rXC, 0.786, 0.886, fibTol) && inR(rBC, 1.13, 1.414, fibTol) && !isNaN(rCD) && inR(rCD, 1.272, 2.0, fibTol)) hit = true;
-      else if (inR(rXC, 1.13, 1.618, fibTol) && !isNaN(rCD) && inR(rCD, 1.618, 2.24, fibTol)) hit = true;
-      if (hit) {
-        patOn = true; patDone = true; patAge = 0; patN = 5;
+      let hit = 0;
+      if (inR(rAB, 0.618, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 0.786, 0.786, fibTol)) hit = 2;
+      else if (inR(rAB, 0.382, 0.50, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 0.886, 0.886, fibTol)) hit = 3;
+      else if (inR(rAB, 0.786, 0.786, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 1.272, 1.618, fibTol)) hit = 4;
+      else if (inR(rAB, 0.382, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 1.618, 1.618, fibTol)) hit = 5;
+      else if (inR(rXC, 0.786, 0.886, fibTol) && inR(rBC, 1.13, 1.414, fibTol) && !isNaN(rCD) && inR(rCD, 1.272, 2.0, fibTol)) hit = 6;
+      else if (inR(rXC, 1.13, 1.618, fibTol) && !isNaN(rCD) && inR(rCD, 1.618, 2.24, fibTol)) hit = 7;
+      if (hit > 0) {
+        patOn = true; patDone = true; patAge = 0; patN = 5; patKind = hit;
         a0px = X; a0t = Xt; a0i = Xi;
         a1px = A; a1t = At; a1i = Ai;
         a2px = B; a2t = Bt; a2i = Bi;
@@ -342,14 +373,15 @@ function onBar(): void {
       const rAB = ab / xa;
       const rBC = bc / ab;
       const rXC = xc / xa;
-      let near = inR(rBC, 0.382, 0.886, fibTol);
-      if (inR(rAB, 0.618, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol)) near = true;
-      else if (inR(rAB, 0.382, 0.50, fibTol) && inR(rBC, 0.382, 0.886, fibTol)) near = true;
-      else if (inR(rAB, 0.786, 0.786, fibTol) && inR(rBC, 0.382, 0.886, fibTol)) near = true;
-      else if (inR(rXC, 0.786, 0.886, fibTol) && inR(rBC, 1.13, 1.414, fibTol)) near = true;
-      else if (inR(rXC, 1.13, 1.618, fibTol)) near = true;
-      if (near) {
-        patOn = true; patDone = false; patAge = 0; patN = 4;
+      let nearK = 0;
+      if (inR(rAB, 0.618, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol)) nearK = 2;
+      else if (inR(rAB, 0.382, 0.50, fibTol) && inR(rBC, 0.382, 0.886, fibTol)) nearK = 3;
+      else if (inR(rAB, 0.786, 0.786, fibTol) && inR(rBC, 0.382, 0.886, fibTol)) nearK = 4;
+      else if (inR(rXC, 0.786, 0.886, fibTol) && inR(rBC, 1.13, 1.414, fibTol)) nearK = 6;
+      else if (inR(rXC, 1.13, 1.618, fibTol)) nearK = 7;
+      else if (inR(rBC, 0.382, 0.886, fibTol)) nearK = 1;
+      if (nearK > 0) {
+        patOn = true; patDone = false; patAge = 0; patN = 4; patKind = nearK;
         a0px = X; a0t = Xt; a0i = Xi;
         a1px = A; a1t = At; a1i = Ai;
         a2px = B; a2t = Bt; a2i = Bi;
@@ -369,10 +401,15 @@ function onBar(): void {
   out_zz_ray_at(2, NaN, NaN, 0.0, 0.0, 2, 2, 0);
   out_zz_ray_at(3, NaN, NaN, 0.0, 0.0, 3, 3, 0);
   if (shZz && patOn && patN >= 2) {
-    if (!isNaN(a0px) && !isNaN(a1px)) out_zz_ray_at(0, a0px, a1px, a0t, a1t, 0, 0, 1);
-    if (patN >= 3 && !isNaN(a1px) && !isNaN(a2px)) out_zz_ray_at(1, a1px, a2px, a1t, a2t, 1, 1, 1);
-    if (patN >= 4 && !isNaN(a2px) && !isNaN(a3px)) out_zz_ray_at(2, a2px, a3px, a2t, a3t, 2, 2, 1);
-    if (patN >= 5 && !isNaN(a3px) && !isNaN(a4px)) out_zz_ray_at(3, a3px, a4px, a3t, a4t, 3, 3, 1);
+    let w = 0;
+    if (patKind == 2) w = 1;
+    else if (patKind == 3) w = 2;
+    else if (patKind == 4 || patKind == 5 || patKind == 6 || patKind == 7) w = 3;
+    else if (patKind == 8) w = 0;
+    if (!isNaN(a0px) && !isNaN(a1px)) out_zz_ray_at(0, a0px, a1px, a0t, a1t, w, 0, 1);
+    if (patN >= 3 && !isNaN(a1px) && !isNaN(a2px)) out_zz_ray_at(1, a1px, a2px, a1t, a2t, w, 1, 1);
+    if (patN >= 4 && !isNaN(a2px) && !isNaN(a3px)) out_zz_ray_at(2, a2px, a3px, a2t, a3t, w, 2, 1);
+    if (patN >= 5 && !isNaN(a3px) && !isNaN(a4px)) out_zz_ray_at(3, a3px, a4px, a3t, a4t, w, 3, 1);
   }
 
   let showA = false; let showB = false; let showC = false; let showD = false; let showX = false;
@@ -399,6 +436,14 @@ function onBar(): void {
   out_g_done(showDone ? 1.0 : 0.0);
   out_g_near(showNear ? 1.0 : 0.0);
   out_g_name(showName ? 1.0 : 0.0);
+  out_g_abcd(showName && patKind == 1 ? 1.0 : 0.0);
+  out_g_gart(showName && patKind == 2 ? 1.0 : 0.0);
+  out_g_bat(showName && patKind == 3 ? 1.0 : 0.0);
+  out_g_fly(showName && patKind == 4 ? 1.0 : 0.0);
+  out_g_crab(showName && patKind == 5 ? 1.0 : 0.0);
+  out_g_cyph(showName && patKind == 6 ? 1.0 : 0.0);
+  out_g_shark(showName && patKind == 7 ? 1.0 : 0.0);
+  out_g_wxy(showName && patKind == 8 ? 1.0 : 0.0);
 
   if (shExt && !isNaN(lastHi)) out_ext_hi(lastHi * 1.002); else out_ext_hi(NaN);
   if (shExt && !isNaN(lastLo)) out_ext_lo(lastLo * 0.998); else out_ext_lo(NaN);
