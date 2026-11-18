@@ -1,9 +1,10 @@
 //@lang=wrun-ts
 // UWUWORT-Z — overlay only
-// Zigzag only when a harmonic is near completion OR confirmed (then stays).
+// Zigzag only when harmonic near-complete OR confirmed (stays).
 // Harmonics: ABCD, Gartley, Bat, Butterfly, Crab, Cypher, Shark, WXYZ
-// Fib tol 10%. Letters at swings. Purple circle when done.
+// Fib tol 10%. Letters with char. Purple done / near circles.
 // Extreme ±0.2%, yellow POC+mid, VAH pink / VAL teal.
+// 4 equalizer trendlines: 2 green up, 2 red down.
 
 page("Display");
 param.bool("show_zz", true, { label: "Zigzag (near-complete + confirmed patterns)" });
@@ -11,6 +12,7 @@ param.bool("show_harm", true, { label: "Harmonics near-complete + confirmed" });
 param.bool("show_ext", true, { label: "Extreme levels ±0.2% (pink high / teal low)" });
 param.bool("show_poc", true, { label: "Yellow POC zone + mid" });
 param.bool("show_va", true, { label: "Value Area High (pink) / Low (teal)" });
+param.bool("show_eq", true, { label: "Equalizer trendlines 2 green up / 2 red down" });
 
 page("Logic");
 param.int("swing_len", 3, { min: 2, max: 20, label: "Swing length (bars each side)" });
@@ -27,6 +29,18 @@ plot.rays({
   line_style: "solid",
   opacity: 0.95,
   words: ["leg1", "leg2", "leg3", "leg4", "leg5", "leg6"],
+  tooltip: "{{word}}",
+  panel: "overlay"
+});
+
+plot.rays({
+  name: "eq",
+  slots: 4,
+  colors: ["#22c55e", "#4ade80", "#ef4444", "#f87171"],
+  width: 1.5,
+  line_style: "solid",
+  opacity: 0.9,
+  words: ["EQ up 1", "EQ up 2", "EQ down 1", "EQ down 2"],
   tooltip: "{{word}}",
   panel: "overlay"
 });
@@ -63,14 +77,14 @@ const gZ = output("g_z", none);
 const gDone = output("g_done", none);
 const gNear = output("g_near", none);
 
-output("lab_a", shape, overlay, { color: "#e879f9", shape_where: "g_a", shape: "char", location: "above_bar", glow: 6, description: "A" });
-output("lab_b", shape, overlay, { color: "#e879f9", shape_where: "g_b", shape: "char", location: "below_bar", glow: 6, description: "B" });
-output("lab_c", shape, overlay, { color: "#e879f9", shape_where: "g_c", shape: "char", location: "above_bar", glow: 6, description: "C" });
-output("lab_d", shape, overlay, { color: "#e879f9", shape_where: "g_d", shape: "char", location: "below_bar", glow: 6, description: "D" });
-output("lab_x", shape, overlay, { color: "#38bdf8", shape_where: "g_x", shape: "char", location: "above_bar", glow: 6, description: "X" });
-output("lab_w", shape, overlay, { color: "#38bdf8", shape_where: "g_w", shape: "char", location: "above_bar", glow: 6, description: "W" });
-output("lab_y", shape, overlay, { color: "#38bdf8", shape_where: "g_y", shape: "char", location: "below_bar", glow: 6, description: "Y" });
-output("lab_z", shape, overlay, { color: "#38bdf8", shape_where: "g_z", shape: "char", location: "above_bar", glow: 6, description: "Z" });
+output("lab_a", shape, overlay, { color: "#e879f9", shape_where: "g_a", shape: "char", char: "A", location: "above_bar", glow: 6, description: "A" });
+output("lab_b", shape, overlay, { color: "#e879f9", shape_where: "g_b", shape: "char", char: "B", location: "below_bar", glow: 6, description: "B" });
+output("lab_c", shape, overlay, { color: "#e879f9", shape_where: "g_c", shape: "char", char: "C", location: "above_bar", glow: 6, description: "C" });
+output("lab_d", shape, overlay, { color: "#e879f9", shape_where: "g_d", shape: "char", char: "D", location: "below_bar", glow: 6, description: "D" });
+output("lab_x", shape, overlay, { color: "#38bdf8", shape_where: "g_x", shape: "char", char: "X", location: "above_bar", glow: 6, description: "X" });
+output("lab_w", shape, overlay, { color: "#38bdf8", shape_where: "g_w", shape: "char", char: "W", location: "above_bar", glow: 6, description: "W" });
+output("lab_y", shape, overlay, { color: "#38bdf8", shape_where: "g_y", shape: "char", char: "Y", location: "below_bar", glow: 6, description: "Y" });
+output("lab_z", shape, overlay, { color: "#38bdf8", shape_where: "g_z", shape: "char", char: "Z", location: "above_bar", glow: 6, description: "Z" });
 output("done", shape, overlay, { color: "#a855f7", shape_where: "g_done", shape: "circle", location: "above_bar", glow: 18, description: "Pattern confirmed" });
 output("near", shape, overlay, { color: "#c4b5fd", shape_where: "g_near", shape: "circle", location: "below_bar", glow: 10, description: "Near completion" });
 
@@ -99,6 +113,13 @@ let keepBars: i32 = 200;
 let idx: i32 = 0;
 let lastHi: f64 = NaN;
 let lastLo: f64 = NaN;
+
+let eqUp0Px0: f64 = NaN; let eqUp0Px1: f64 = NaN; let eqUp0T0: f64 = 0.0; let eqUp0T1: f64 = 0.0;
+let eqUp1Px0: f64 = NaN; let eqUp1Px1: f64 = NaN; let eqUp1T0: f64 = 0.0; let eqUp1T1: f64 = 0.0;
+let eqDn0Px0: f64 = NaN; let eqDn0Px1: f64 = NaN; let eqDn0T0: f64 = 0.0; let eqDn0T1: f64 = 0.0;
+let eqDn1Px0: f64 = NaN; let eqDn1Px1: f64 = NaN; let eqDn1T0: f64 = 0.0; let eqDn1T1: f64 = 0.0;
+let loPxA: f64 = NaN; let loTA: f64 = 0.0; let loPxB: f64 = NaN; let loTB: f64 = 0.0;
+let hiPxA: f64 = NaN; let hiTA: f64 = 0.0; let hiPxB: f64 = NaN; let hiTB: f64 = 0.0;
 
 let patOn: bool = false;
 let patDone: bool = false;
@@ -206,6 +227,9 @@ function onStart(): void {
   idx = 0;
   lastHi = NaN;
   lastLo = NaN;
+  eqUp0Px0 = NaN; eqUp0Px1 = NaN; eqUp1Px0 = NaN; eqUp1Px1 = NaN;
+  eqDn0Px0 = NaN; eqDn0Px1 = NaN; eqDn1Px0 = NaN; eqDn1Px1 = NaN;
+  loPxA = NaN; loPxB = NaN; hiPxA = NaN; hiPxB = NaN;
   patOn = false;
   patDone = false;
   patAge = 0;
@@ -227,6 +251,7 @@ function onBar(): void {
   const shExt = pb_show_ext();
   const shPoc = pb_show_poc();
   const shVa = pb_show_va();
+  const shEq = pb_show_eq();
 
   fCur = (fCur + 1) % FMAX;
   fHi[fCur] = h;
@@ -239,10 +264,26 @@ function onBar(): void {
   if (sw.newHigh()) {
     lastHi = sw.lastHigh();
     pushPivot(lastHi, t, 1);
+    if (!isNaN(hiPxB) && !isNaN(hiPxA) && lastHi < hiPxB) {
+      eqDn1Px0 = hiPxA; eqDn1T0 = hiTA; eqDn1Px1 = hiPxB; eqDn1T1 = hiTB;
+    }
+    if (!isNaN(hiPxB) && lastHi < hiPxB) {
+      eqDn0Px0 = hiPxB; eqDn0T0 = hiTB; eqDn0Px1 = lastHi; eqDn0T1 = t;
+    }
+    hiPxA = hiPxB; hiTA = hiTB;
+    hiPxB = lastHi; hiTB = t;
   }
   if (sw.newLow()) {
     lastLo = sw.lastLow();
     pushPivot(lastLo, t, -1);
+    if (!isNaN(loPxB) && !isNaN(loPxA) && lastLo > loPxB) {
+      eqUp1Px0 = loPxA; eqUp1T0 = loTA; eqUp1Px1 = loPxB; eqUp1T1 = loTB;
+    }
+    if (!isNaN(loPxB) && lastLo > loPxB) {
+      eqUp0Px0 = loPxB; eqUp0T0 = loTB; eqUp0Px1 = lastLo; eqUp0T1 = t;
+    }
+    loPxA = loPxB; loTA = loTB;
+    loPxB = lastLo; loTB = t;
   }
 
   if (shHarm && pivN >= 4) {
@@ -372,6 +413,20 @@ function onBar(): void {
   else out_ext_hi(NaN);
   if (shExt && !isNaN(lastLo)) out_ext_lo(lastLo * 0.998);
   else out_ext_lo(NaN);
+
+  for (let s = 0; s < 4; s += 1) {
+    out_eq_ray_at(s, NaN, NaN, 0.0, 0.0, s, s, 0);
+  }
+  if (shEq) {
+    if (!isNaN(eqUp0Px0) && !isNaN(eqUp0Px1))
+      out_eq_ray_at(0, eqUp0Px0, eqUp0Px1, eqUp0T0, eqUp0T1, 0, 0, 1);
+    if (!isNaN(eqUp1Px0) && !isNaN(eqUp1Px1))
+      out_eq_ray_at(1, eqUp1Px0, eqUp1Px1, eqUp1T0, eqUp1T1, 1, 1, 1);
+    if (!isNaN(eqDn0Px0) && !isNaN(eqDn0Px1))
+      out_eq_ray_at(2, eqDn0Px0, eqDn0Px1, eqDn0T0, eqDn0T1, 2, 2, 1);
+    if (!isNaN(eqDn1Px0) && !isNaN(eqDn1Px1))
+      out_eq_ray_at(3, eqDn1Px0, eqDn1Px1, eqDn1T0, eqDn1T1, 3, 3, 1);
+  }
 
   let pocMid = NaN;
   let vah = NaN;
