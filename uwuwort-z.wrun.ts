@@ -1,11 +1,13 @@
 //@lang=wrun-ts
-// UWUWORT-Z — single overlay: zigzag + ABCD/WXYZ/harmonics (10% fib tol),
-// letters at swings, purple done-circle, extreme levels ±0.2%,
-// chart-TF POC (yellow) + mid, VAH (pink) / VAL (teal). No lower panel.
+// UWUWORT-Z — overlay only
+// Zigzag only when a harmonic is near completion OR confirmed (then stays).
+// Harmonics: ABCD, Gartley, Bat, Butterfly, Crab, Cypher, Shark, WXYZ
+// Fib tol 10%. Letters at swings. Purple circle when done.
+// Extreme ±0.2%, yellow POC+mid, VAH pink / VAL teal.
 
 page("Display");
-param.bool("show_zz", true, { label: "Zigzag lines + swing letters" });
-param.bool("show_harm", true, { label: "ABCD / WXYZ / harmonics (10% tol)" });
+param.bool("show_zz", true, { label: "Zigzag (near-complete + confirmed patterns)" });
+param.bool("show_harm", true, { label: "Harmonics near-complete + confirmed" });
 param.bool("show_ext", true, { label: "Extreme levels ±0.2% (pink high / teal low)" });
 param.bool("show_poc", true, { label: "Yellow POC zone + mid" });
 param.bool("show_va", true, { label: "Value Area High (pink) / Low (teal)" });
@@ -15,15 +17,16 @@ param.int("swing_len", 3, { min: 2, max: 20, label: "Swing length (bars each sid
 param.number("fib_tol", 0.10, { min: 0.02, max: 0.25, step: 0.01, label: "Fib ratio tolerance (0.10 = 10%)", when: "show_harm" });
 param.int("poc_lb", 96, { min: 16, max: 400, label: "POC / Value Area lookback bars", when: "show_poc" });
 param.number("va_pct", 70, { min: 50, max: 90, step: 1, label: "Value Area volume %", when: "show_va" });
+param.int("keep_bars", 200, { min: 40, max: 600, label: "Keep confirmed pattern this many bars" });
 
 plot.rays({
   name: "zz",
-  slots: 8,
-  colors: ["#a78bfa", "#c4b5fd", "#a78bfa", "#c4b5fd", "#a78bfa", "#c4b5fd", "#a78bfa", "#c4b5fd"],
-  width: 1.5,
+  slots: 6,
+  colors: ["#a78bfa", "#c4b5fd", "#a78bfa", "#c4b5fd", "#a78bfa", "#c4b5fd"],
+  width: 1.8,
   line_style: "solid",
   opacity: 0.95,
-  words: ["ZZ1", "ZZ2", "ZZ3", "ZZ4", "ZZ5", "ZZ6", "ZZ7", "ZZ8"],
+  words: ["leg1", "leg2", "leg3", "leg4", "leg5", "leg6"],
   tooltip: "{{word}}",
   panel: "overlay"
 });
@@ -53,23 +56,25 @@ const gA = output("g_a", none);
 const gB = output("g_b", none);
 const gC = output("g_c", none);
 const gD = output("g_d", none);
-const gW = output("g_w", none);
 const gX = output("g_x", none);
+const gW = output("g_w", none);
 const gY = output("g_y", none);
 const gZ = output("g_z", none);
 const gDone = output("g_done", none);
+const gNear = output("g_near", none);
 
 output("lab_a", shape, overlay, { color: "#e879f9", shape_where: "g_a", shape: "char", location: "above_bar", glow: 6, description: "A" });
 output("lab_b", shape, overlay, { color: "#e879f9", shape_where: "g_b", shape: "char", location: "below_bar", glow: 6, description: "B" });
 output("lab_c", shape, overlay, { color: "#e879f9", shape_where: "g_c", shape: "char", location: "above_bar", glow: 6, description: "C" });
 output("lab_d", shape, overlay, { color: "#e879f9", shape_where: "g_d", shape: "char", location: "below_bar", glow: 6, description: "D" });
+output("lab_x", shape, overlay, { color: "#38bdf8", shape_where: "g_x", shape: "char", location: "above_bar", glow: 6, description: "X" });
 output("lab_w", shape, overlay, { color: "#38bdf8", shape_where: "g_w", shape: "char", location: "above_bar", glow: 6, description: "W" });
-output("lab_x", shape, overlay, { color: "#38bdf8", shape_where: "g_x", shape: "char", location: "below_bar", glow: 6, description: "X" });
-output("lab_y", shape, overlay, { color: "#38bdf8", shape_where: "g_y", shape: "char", location: "above_bar", glow: 6, description: "Y" });
-output("lab_z", shape, overlay, { color: "#38bdf8", shape_where: "g_z", shape: "char", location: "below_bar", glow: 6, description: "Z" });
-output("done", shape, overlay, { color: "#a855f7", shape_where: "g_done", shape: "circle", location: "above_bar", glow: 18, description: "Pattern complete" });
+output("lab_y", shape, overlay, { color: "#38bdf8", shape_where: "g_y", shape: "char", location: "below_bar", glow: 6, description: "Y" });
+output("lab_z", shape, overlay, { color: "#38bdf8", shape_where: "g_z", shape: "char", location: "above_bar", glow: 6, description: "Z" });
+output("done", shape, overlay, { color: "#a855f7", shape_where: "g_done", shape: "circle", location: "above_bar", glow: 18, description: "Pattern confirmed" });
+output("near", shape, overlay, { color: "#c4b5fd", shape_where: "g_near", shape: "circle", location: "below_bar", glow: 10, description: "Near completion" });
 
-const PMAX: i32 = 16;
+const PMAX: i32 = 20;
 let pivPx = new Array<f64>(PMAX);
 let pivT = new Array<f64>(PMAX);
 let pivIdx = new Array<i32>(PMAX);
@@ -89,20 +94,31 @@ let right: i32 = 3;
 let fibTol: f64 = 0.10;
 let pocLb: i32 = 96;
 let vaPct: f64 = 70.0;
+let keepBars: i32 = 200;
 
 let idx: i32 = 0;
 let lastHi: f64 = NaN;
 let lastLo: f64 = NaN;
 
+let patOn: bool = false;
+let patDone: bool = false;
+let patAge: i32 = 0;
+let patKind: i32 = 0;
+let patN: i32 = 0;
+let patPx = new Array<f64>(6);
+let patT = new Array<f64>(6);
+let patI = new Array<i32>(6);
+
+let fireX: i32 = -1;
 let fireA: i32 = -1;
 let fireB: i32 = -1;
 let fireC: i32 = -1;
 let fireD: i32 = -1;
 let fireW: i32 = -1;
-let fireX: i32 = -1;
 let fireY: i32 = -1;
 let fireZ: i32 = -1;
 let fireDone: i32 = -1;
+let fireNear: i32 = -1;
 
 function inR(x: f64, a: f64, b: f64, tol: f64): bool {
   const lo = a < b ? a : b;
@@ -131,21 +147,72 @@ function pushPivot(px: f64, t: f64, kind: i32): void {
   }
 }
 
+function setPat(kind: i32, nPts: i32, base: i32, done: bool): void {
+  patOn = true;
+  patDone = done;
+  patAge = 0;
+  patKind = kind;
+  patN = nPts;
+  for (let i = 0; i < nPts; i += 1) {
+    patPx[i] = pivPx[base + i];
+    patT[i] = pivT[base + i];
+    patI[i] = pivIdx[base + i];
+  }
+  if (kind == 8) {
+    fireW = patI[0] + right;
+    fireX = patI[1] + right;
+    fireY = patI[2] + right;
+    fireZ = patI[3] + right;
+    fireA = -1; fireB = -1; fireC = -1; fireD = -1;
+  } else if (nPts == 5) {
+    fireX = patI[0] + right;
+    fireA = patI[1] + right;
+    fireB = patI[2] + right;
+    fireC = patI[3] + right;
+    fireD = patI[4] + right;
+    fireW = -1; fireY = -1; fireZ = -1;
+  } else if (nPts == 4) {
+    fireA = patI[0] + right;
+    fireB = patI[1] + right;
+    fireC = patI[2] + right;
+    fireD = patI[3] + right;
+    fireX = -1; fireW = -1; fireY = -1; fireZ = -1;
+  } else {
+    fireA = patI[0] + right;
+    fireB = patI[1] + right;
+    fireC = patI[2] + right;
+    fireD = -1;
+    fireX = -1; fireW = -1; fireY = -1; fireZ = -1;
+  }
+  if (done) {
+    fireDone = patI[nPts - 1] + right;
+    fireNear = -1;
+  } else {
+    fireNear = patI[nPts - 1] + right;
+    fireDone = -1;
+  }
+}
+
 function onStart(): void {
   right = i32(p_swing_len());
   sw = new Swings(right, right);
   fibTol = p_fib_tol();
   pocLb = i32(p_poc_lb());
   vaPct = p_va_pct();
+  keepBars = i32(p_keep_bars());
   pivN = 0;
   fN = 0;
   fCur = 0;
   idx = 0;
   lastHi = NaN;
   lastLo = NaN;
-  fireA = -1; fireB = -1; fireC = -1; fireD = -1;
-  fireW = -1; fireX = -1; fireY = -1; fireZ = -1;
-  fireDone = -1;
+  patOn = false;
+  patDone = false;
+  patAge = 0;
+  patN = 0;
+  fireX = -1; fireA = -1; fireB = -1; fireC = -1; fireD = -1;
+  fireW = -1; fireY = -1; fireZ = -1;
+  fireDone = -1; fireNear = -1;
 }
 
 function onBar(): void {
@@ -170,39 +237,141 @@ function onBar(): void {
 
   sw.update(h, l);
   if (sw.newHigh()) {
-    const px = sw.lastHigh();
-    lastHi = px;
-    pushPivot(px, t, 1);
+    lastHi = sw.lastHigh();
+    pushPivot(lastHi, t, 1);
   }
   if (sw.newLow()) {
-    const px = sw.lastLow();
-    lastLo = px;
-    pushPivot(px, t, -1);
+    lastLo = sw.lastLow();
+    pushPivot(lastLo, t, -1);
   }
 
-  for (let s = 0; s < 8; s += 1) {
-    out_zz_ray_at(s, NaN, NaN, 0.0, 0.0, s, s, 0);
-  }
-  if (shZz && pivN >= 2) {
-    const nLegs = pivN - 1 < 8 ? pivN - 1 : 8;
-    const start = pivN - 1 - nLegs;
-    for (let i = 0; i < nLegs; i += 1) {
-      const a = start + i;
-      const b = a + 1;
-      out_zz_ray_at(i, pivPx[a], pivPx[b], pivT[a], pivT[b], i, i, 1);
+  if (shHarm && pivN >= 4) {
+    const i0 = pivN - 4;
+    const A = pivPx[i0];
+    const B = pivPx[i0 + 1];
+    const C = pivPx[i0 + 2];
+    const D = pivPx[i0 + 3];
+    const ab = Math.abs(B - A);
+    const bc = Math.abs(C - B);
+    const cd = Math.abs(D - C);
+    if (ab > 0.0 && bc > 0.0 && cd > 0.0) {
+      const rBC = bc / ab;
+      const rCD = cd / ab;
+      const abcdDone = inR(rBC, 0.382, 0.886, fibTol) && inR(rCD, 0.90, 1.272, fibTol);
+      const rYZ = cd / bc;
+      const wxyDone = inR(rBC, 0.382, 1.272, fibTol) && inR(rYZ, 0.618, 1.618, fibTol);
+      if (abcdDone) setPat(1, 4, i0, true);
+      else if (wxyDone) setPat(8, 4, i0, true);
+    }
+    if (pivN >= 3) {
+      const j0 = pivN - 3;
+      const A2 = pivPx[j0];
+      const B2 = pivPx[j0 + 1];
+      const C2 = pivPx[j0 + 2];
+      const ab2 = Math.abs(B2 - A2);
+      const bc2 = Math.abs(C2 - B2);
+      if (ab2 > 0.0 && bc2 > 0.0) {
+        const rBC2 = bc2 / ab2;
+        if (inR(rBC2, 0.382, 0.886, fibTol)) {
+          if (!patOn || !patDone) setPat(1, 3, j0, false);
+        }
+      }
     }
   }
 
-  if (shExt && !isNaN(lastHi)) {
-    out_ext_hi(lastHi * 1.002);
-  } else {
-    out_ext_hi(NaN);
+  if (shHarm && pivN >= 5) {
+    const base = pivN - 5;
+    const X = pivPx[base];
+    const A = pivPx[base + 1];
+    const B = pivPx[base + 2];
+    const C = pivPx[base + 3];
+    const D = pivPx[base + 4];
+    const xa = Math.abs(A - X);
+    const ab = Math.abs(B - A);
+    const bc = Math.abs(C - B);
+    const cd = Math.abs(D - C);
+    const xd = Math.abs(D - X);
+    const xc = Math.abs(C - X);
+    if (xa > 0.0 && ab > 0.0 && bc > 0.0) {
+      const rAB = ab / xa;
+      const rBC = bc / ab;
+      const rXD = xd / xa;
+      const rXC = xc / xa;
+      const rCD = cd > 0.0 ? cd / bc : NaN;
+
+      const gartley = inR(rAB, 0.618, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 0.786, 0.786, fibTol);
+      const bat = inR(rAB, 0.382, 0.50, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 0.886, 0.886, fibTol);
+      const fly = inR(rAB, 0.786, 0.786, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 1.272, 1.618, fibTol);
+      const crab = inR(rAB, 0.382, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 1.618, 1.618, fibTol);
+      const cypher = inR(rXC, 0.786, 0.886, fibTol) && inR(rBC, 1.13, 1.414, fibTol) && !isNaN(rCD) && inR(rCD, 1.272, 2.0, fibTol);
+      const shark = inR(rXC, 1.13, 1.618, fibTol) && !isNaN(rCD) && inR(rCD, 1.618, 2.24, fibTol);
+
+      if (gartley) setPat(2, 5, base, true);
+      else if (bat) setPat(3, 5, base, true);
+      else if (fly) setPat(4, 5, base, true);
+      else if (crab) setPat(5, 5, base, true);
+      else if (cypher) setPat(6, 5, base, true);
+      else if (shark) setPat(7, 5, base, true);
+    }
   }
-  if (shExt && !isNaN(lastLo)) {
-    out_ext_lo(lastLo * 0.998);
-  } else {
-    out_ext_lo(NaN);
+
+  if (shHarm && pivN >= 4) {
+    const base = pivN - 4;
+    const X = pivPx[base];
+    const A = pivPx[base + 1];
+    const B = pivPx[base + 2];
+    const C = pivPx[base + 3];
+    const xa = Math.abs(A - X);
+    const ab = Math.abs(B - A);
+    const bc = Math.abs(C - B);
+    const xc = Math.abs(C - X);
+    if (xa > 0.0 && ab > 0.0 && bc > 0.0) {
+      const rAB = ab / xa;
+      const rBC = bc / ab;
+      const rXC = xc / xa;
+      const nearG = inR(rAB, 0.618, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol);
+      const nearBat = inR(rAB, 0.382, 0.50, fibTol) && inR(rBC, 0.382, 0.886, fibTol);
+      const nearFly = inR(rAB, 0.786, 0.786, fibTol) && inR(rBC, 0.382, 0.886, fibTol);
+      const nearCrab = inR(rAB, 0.382, 0.618, fibTol) && inR(rBC, 0.382, 0.886, fibTol);
+      const nearCy = inR(rXC, 0.786, 0.886, fibTol) && inR(rBC, 1.13, 1.414, fibTol);
+      const nearShark = inR(rXC, 1.13, 1.618, fibTol);
+      if (nearG || nearBat || nearFly || nearCrab || nearCy || nearShark) {
+        if (!patOn || !patDone) {
+          let k: i32 = 2;
+          if (nearBat) k = 3;
+          else if (nearFly) k = 4;
+          else if (nearCrab) k = 5;
+          else if (nearCy) k = 6;
+          else if (nearShark) k = 7;
+          setPat(k, 4, base, false);
+        }
+      }
+    }
   }
+
+  if (patOn) {
+    patAge += 1;
+    if (patAge > keepBars) {
+      patOn = false;
+      patDone = false;
+      patN = 0;
+    }
+  }
+
+  for (let s = 0; s < 6; s += 1) {
+    out_zz_ray_at(s, NaN, NaN, 0.0, 0.0, s, s, 0);
+  }
+  if (shZz && patOn && patN >= 2) {
+    const nLegs = patN - 1 < 6 ? patN - 1 : 6;
+    for (let i = 0; i < nLegs; i += 1) {
+      out_zz_ray_at(i, patPx[i], patPx[i + 1], patT[i], patT[i + 1], i, i, 1);
+    }
+  }
+
+  if (shExt && !isNaN(lastHi)) out_ext_hi(lastHi * 1.002);
+  else out_ext_hi(NaN);
+  if (shExt && !isNaN(lastLo)) out_ext_lo(lastLo * 0.998);
+  else out_ext_lo(NaN);
 
   let pocMid = NaN;
   let vah = NaN;
@@ -256,9 +425,7 @@ function onBar(): void {
           } else if (loB > 0) {
             loB -= 1;
             acc += counts[loB];
-          } else {
-            break;
-          }
+          } else break;
         } else {
           if (loB > 0) {
             loB -= 1;
@@ -266,9 +433,7 @@ function onBar(): void {
           } else if (hiB < bins - 1) {
             hiB += 1;
             acc += counts[hiB];
-          } else {
-            break;
-          }
+          } else break;
         }
       }
       val = mn + f64(loB) * step;
@@ -296,103 +461,16 @@ function onBar(): void {
     out_val(NaN);
   }
 
-  let showA = false;
-  let showB = false;
-  let showC = false;
-  let showD = false;
-  let showW = false;
-  let showX = false;
-  let showY = false;
-  let showZ = false;
-  let showDone = false;
-
-  if (shHarm && pivN >= 4) {
-    const i0 = pivN - 4;
-    const A = pivPx[i0];
-    const B = pivPx[i0 + 1];
-    const C = pivPx[i0 + 2];
-    const D = pivPx[i0 + 3];
-    const ab = Math.abs(B - A);
-    const bc = Math.abs(C - B);
-    const cd = Math.abs(D - C);
-    if (ab > 0.0 && bc > 0.0 && cd > 0.0) {
-      const rBC = bc / ab;
-      const rCD = cd / ab;
-      const abcdOk = inR(rBC, 0.382, 0.886, fibTol) && inR(rCD, 0.90, 1.272, fibTol);
-      const rYZ = cd / bc;
-      const wxyOk = inR(rBC, 0.382, 1.272, fibTol) && inR(rYZ, 0.618, 1.618, fibTol);
-
-      if (abcdOk || wxyOk) {
-        const confBar = pivIdx[i0 + 3] + right;
-        if (idx == confBar) {
-          fireA = pivIdx[i0] + right;
-          fireB = pivIdx[i0 + 1] + right;
-          fireC = pivIdx[i0 + 2] + right;
-          fireD = pivIdx[i0 + 3] + right;
-          fireDone = confBar;
-          if (wxyOk && !abcdOk) {
-            fireW = fireA;
-            fireX = fireB;
-            fireY = fireC;
-            fireZ = fireD;
-            fireA = -1;
-            fireB = -1;
-            fireC = -1;
-            fireD = -1;
-          }
-        }
-      }
-    }
-  }
-
-  if (shHarm && pivN >= 5) {
-    const X = pivPx[pivN - 5];
-    const A = pivPx[pivN - 4];
-    const B = pivPx[pivN - 3];
-    const C = pivPx[pivN - 2];
-    const D = pivPx[pivN - 1];
-    const xa = Math.abs(A - X);
-    const ab = Math.abs(B - A);
-    const bc = Math.abs(C - B);
-    const xd = Math.abs(D - X);
-    if (xa > 0.0 && ab > 0.0 && bc > 0.0) {
-      const rAB = ab / xa;
-      const rBC = bc / ab;
-      const rXD = xd / xa;
-      const bat = inR(rAB, 0.382, 0.50, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 0.786, 0.986, fibTol);
-      const fly = inR(rAB, 0.786, 0.886, fibTol) && inR(rBC, 0.382, 0.886, fibTol) && inR(rXD, 1.272, 1.618, fibTol);
-      if (bat || fly) {
-        const confBar = pivIdx[pivN - 1] + right;
-        if (idx == confBar) {
-          fireA = pivIdx[pivN - 4] + right;
-          fireB = pivIdx[pivN - 3] + right;
-          fireC = pivIdx[pivN - 2] + right;
-          fireD = pivIdx[pivN - 1] + right;
-          fireDone = confBar;
-        }
-      }
-    }
-  }
-
-  if (idx == fireA) showA = true;
-  if (idx == fireB) showB = true;
-  if (idx == fireC) showC = true;
-  if (idx == fireD) showD = true;
-  if (idx == fireW) showW = true;
-  if (idx == fireX) showX = true;
-  if (idx == fireY) showY = true;
-  if (idx == fireZ) showZ = true;
-  if (idx == fireDone) showDone = true;
-
-  out_g_a(shHarm && showA ? 1.0 : 0.0);
-  out_g_b(shHarm && showB ? 1.0 : 0.0);
-  out_g_c(shHarm && showC ? 1.0 : 0.0);
-  out_g_d(shHarm && showD ? 1.0 : 0.0);
-  out_g_w(shHarm && showW ? 1.0 : 0.0);
-  out_g_x(shHarm && showX ? 1.0 : 0.0);
-  out_g_y(shHarm && showY ? 1.0 : 0.0);
-  out_g_z(shHarm && showZ ? 1.0 : 0.0);
-  out_g_done(shHarm && showDone ? 1.0 : 0.0);
+  out_g_a(shHarm && idx == fireA ? 1.0 : 0.0);
+  out_g_b(shHarm && idx == fireB ? 1.0 : 0.0);
+  out_g_c(shHarm && idx == fireC ? 1.0 : 0.0);
+  out_g_d(shHarm && idx == fireD ? 1.0 : 0.0);
+  out_g_x(shHarm && idx == fireX ? 1.0 : 0.0);
+  out_g_w(shHarm && idx == fireW ? 1.0 : 0.0);
+  out_g_y(shHarm && idx == fireY ? 1.0 : 0.0);
+  out_g_z(shHarm && idx == fireZ ? 1.0 : 0.0);
+  out_g_done(shHarm && idx == fireDone ? 1.0 : 0.0);
+  out_g_near(shHarm && idx == fireNear ? 1.0 : 0.0);
 
   idx += 1;
 }
