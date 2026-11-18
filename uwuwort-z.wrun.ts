@@ -96,7 +96,7 @@ output("lab_c", shape, overlay, { color: "#e879f9", shape_where: "g_c", shape: "
 output("lab_d", shape, overlay, { color: "#e879f9", shape_where: "g_d", shape: "char", char: "D", location: "below_bar", glow: 8, description: "D" });
 output("lab_x", shape, overlay, { color: "#38bdf8", shape_where: "g_x", shape: "char", char: "X", location: "above_bar", glow: 8, description: "X" });
 output("done", shape, overlay, { color: "#a855f7", shape_where: "g_done", shape: "circle", location: "above_bar", glow: 18, description: "CONFIRMED" });
-output("near", shape, overlay, { { color: "#c4b5fd", shape_where: "g_near", shape: "circle", location: "below_bar", glow: 10, description: "NEAR" });
+output("near", shape, overlay, { color: "#c4b5fd", shape_where: "g_near", shape: "circle", location: "below_bar", glow: 10, description: "NEAR" });
 output("pname", shape, overlay, { color: "#fbbf24", shape_where: "g_name", shape: "diamond", location: "above_bar", glow: 12, description: "Pattern" });
 
 let typSum: f64 = 0.0;
