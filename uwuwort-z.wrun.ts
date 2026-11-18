@@ -1,5 +1,5 @@
 //@lang=wrun-ts
-// UWUWORT-Z — overlay only
+// UWUWORT-Z — overlay only, history-safe (StaticArray, no temp arrays in onBar)
 // Zigzag only when harmonic near-complete OR confirmed (stays).
 // Harmonics: ABCD, Gartley, Bat, Butterfly, Crab, Cypher, Shark, WXYZ
 // Fib tol 10%. Letters with char. Purple done / near circles.
@@ -89,17 +89,19 @@ output("done", shape, overlay, { color: "#a855f7", shape_where: "g_done", shape:
 output("near", shape, overlay, { color: "#c4b5fd", shape_where: "g_near", shape: "circle", location: "below_bar", glow: 10, description: "Near completion" });
 
 const PMAX: i32 = 20;
-let pivPx = new Array<f64>(PMAX);
-let pivT = new Array<f64>(PMAX);
-let pivIdx = new Array<i32>(PMAX);
-let pivK = new Array<i32>(PMAX);
+let pivPx = new StaticArray<f64>(PMAX);
+let pivT = new StaticArray<f64>(PMAX);
+let pivIdx = new StaticArray<i32>(PMAX);
+let pivK = new StaticArray<i32>(PMAX);
 let pivN: i32 = 0;
 
 const FMAX: i32 = 400;
-let fHi = new Array<f64>(FMAX);
-let fLo = new Array<f64>(FMAX);
-let fCl = new Array<f64>(FMAX);
-let fVol = new Array<f64>(FMAX);
+let fHi = new StaticArray<f64>(FMAX);
+let fLo = new StaticArray<f64>(FMAX);
+let fCl = new StaticArray<f64>(FMAX);
+let fVol = new StaticArray<f64>(FMAX);
+const BINS: i32 = 40;
+let pocCounts = new StaticArray<f64>(40);
 let fN: i32 = 0;
 let fCur: i32 = 0;
 
@@ -126,9 +128,9 @@ let patDone: bool = false;
 let patAge: i32 = 0;
 let patKind: i32 = 0;
 let patN: i32 = 0;
-let patPx = new Array<f64>(6);
-let patT = new Array<f64>(6);
-let patI = new Array<i32>(6);
+let patPx = new StaticArray<f64>(6);
+let patT = new StaticArray<f64>(6);
+let patI = new StaticArray<i32>(6);
 
 let fireX: i32 = -1;
 let fireA: i32 = -1;
@@ -442,23 +444,22 @@ function onBar(): void {
       if (fHi[j] > mx) mx = fHi[j];
     }
     if (mx > mn) {
-      const bins: i32 = 40;
-      let counts = new Array<f64>(40);
+      const bins: i32 = BINS;
       let total: f64 = 0.0;
-      for (let b = 0; b < bins; b += 1) counts[b] = 0.0;
+      for (let b = 0; b < bins; b += 1) pocCounts[b] = 0.0;
       for (let k = 0; k < n; k += 1) {
         const j = (fCur - k + FMAX) % FMAX;
         let bi = i32(((fCl[j] - mn) / (mx - mn)) * f64(bins - 1));
         if (bi < 0) bi = 0;
         if (bi >= bins) bi = bins - 1;
-        counts[bi] += fVol[j] > 0.0 ? fVol[j] : 1.0;
+        pocCounts[bi] += fVol[j] > 0.0 ? fVol[j] : 1.0;
         total += fVol[j] > 0.0 ? fVol[j] : 1.0;
       }
       let best: i32 = 0;
-      let bestV = counts[0];
+      let bestV = pocCounts[0];
       for (let b = 1; b < bins; b += 1) {
-        if (counts[b] > bestV) {
-          bestV = counts[b];
+        if (pocCounts[b] > bestV) {
+          bestV = pocCounts[b];
           best = b;
         }
       }
@@ -467,27 +468,27 @@ function onBar(): void {
       pocHalf = step * 1.5;
 
       let need = total * (vaPct / 100.0);
-      let acc = counts[best];
+      let acc = pocCounts[best];
       let loB = best;
       let hiB = best;
       while (acc < need && (loB > 0 || hiB < bins - 1)) {
-        const left = loB > 0 ? counts[loB - 1] : -1.0;
-        const right = hiB < bins - 1 ? counts[hiB + 1] : -1.0;
+        const left = loB > 0 ? pocCounts[loB - 1] : -1.0;
+        const right = hiB < bins - 1 ? pocCounts[hiB + 1] : -1.0;
         if (right >= left) {
           if (hiB < bins - 1) {
             hiB += 1;
-            acc += counts[hiB];
+            acc += pocCounts[hiB];
           } else if (loB > 0) {
             loB -= 1;
-            acc += counts[loB];
+            acc += pocCounts[loB];
           } else break;
         } else {
           if (loB > 0) {
             loB -= 1;
-            acc += counts[loB];
+            acc += pocCounts[loB];
           } else if (hiB < bins - 1) {
             hiB += 1;
-            acc += counts[hiB];
+            acc += pocCounts[hiB];
           } else break;
         }
       }
