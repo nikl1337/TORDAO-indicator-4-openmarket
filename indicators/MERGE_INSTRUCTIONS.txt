@@ -1,0 +1,4 @@
+1) Prefer indicators/merge-0.1337.wrun.ts (full).
+2) If only parts available: concat part1 then part2, drop PART header lines, keep //@lang=wrun-ts first.
+3) Raw base (after push):
+https://raw.githubusercontent.com/nikl1337/TORDAO-indicator-4-openmarket/main/indicators/merge-0.1337.wrun.ts
