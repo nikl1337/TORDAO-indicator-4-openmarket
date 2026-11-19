@@ -1,0 +1,9 @@
+Updated NOVA-4-ext features (use chat download for full .wrun.ts if raw is stale):
+
+1. Harmonics: best-score matching so Gartley / Butterfly / Cypher / Shark / Crab can win vs BAT
+2. POC is yellow (#facc15), thicker; EQ stays purple
+3. VAH/VAL = POC ± 1.5 ATR (clearly away from POC)
+4. POC deviation bands: pink +2 ATR, teal -2 ATR
+5. VWAP bands: ±2 / ±4 / ±6 ATR
+
+Raw: https://raw.githubusercontent.com/nikl1337/TORDAO-indicator-4-openmarket/main/NOVA-4-ext.wrun.ts
