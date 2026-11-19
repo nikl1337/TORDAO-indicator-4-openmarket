@@ -1,0 +1,10 @@
+NOVA-4-ext was updated locally.
+
+Raw full file is available in chat download: NOVA-4-ext.wrun.ts
+
+Or use: https://raw.githubusercontent.com/nikl1337/TORDAO-indicator-4-openmarket/main/NOVA-4-ext.wrun.ts after full push.
+
+Changes:
+- VWAP bands fixed at ±2 ATR and ±4 ATR (teal below / pink above)
+- Harmonic ratios relaxed so BAT/Gartley/Butterfly/Cypher/Shark fire (not only Crab)
+- Hard POC label on chart (char P + flag + ray word POC)
