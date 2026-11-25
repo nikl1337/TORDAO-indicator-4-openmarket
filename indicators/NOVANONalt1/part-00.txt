@@ -1,0 +1,98 @@
+//@lang=wrun-ts
+// NOVANONalt1 - visibility + logic fixes over NOVA-4-ext
+// Shapes are written (not only gates). Letters sit on pivot time via rays.
+// POC is a volume-profile bin. VAH/VAL use va_pct, clamped 1-2 ATR from POC.
+// Week opens Monday UTC. Month opens are calendar months. Rays use pivot time.
+page("Display");
+param.bool("show_ema", true, { label: "EMA ribbon 21/100/144/360/667/800" });
+param.bool("show_ema_box", true, { label: "Boxes red@360 green@800" });
+param.bool("show_vwap", true, { label: "Daily / Weekly / Monthly VWAP" });
+param.bool("show_open", true, { label: "Daily / Weekly / Monthly Open" });
+param.bool("show_bands", true, { label: "VWAP bands ±2 / ±4 / ±6 ATR" });
+param.bool("show_flags", true, { label: "Chart-TF flags, breakout confirmed" });
+param.bool("show_harm", true, { label: "Harmonics (markers)" });
+param.bool("show_zz", true, { label: "Pattern zigzag (finite)" });
+param.bool("show_poc", true, { label: "Volume POC + VAH/VAL (yellow)" });
+param.bool("show_eq", true, { label: "Prev-day EQ + regression channel" });
+
+page("Logic");
+param.int("swing_len", 3, { min: 2, max: 12, label: "Swing length each side" });
+param.number("fib_tol", 0.10, { min: 0.02, max: 0.25, step: 0.01, label: "Fib tolerance", when: "show_harm" });
+param.int("keep_bars", 220, { min: 40, max: 500, label: "Keep pattern bars", when: "show_harm" });
+param.number("flag_pole_atr", 1.8, { min: 0.8, max: 6, step: 0.1, label: "Flag min pole ATR", when: "show_flags" });
+param.int("poc_lb", 96, { min: 16, max: 300, label: "POC lookback (bars)", when: "show_poc" });
+param.number("va_pct", 70, { min: 50, max: 90, step: 1, label: "Value Area %", when: "show_poc" });
+param.int("eq_reg_lb", 48, { min: 12, max: 120, label: "EQ regression lookback", when: "show_eq" });
+
+// --- Rays (finite zigzag + target leg + POC label) ---
+plot.rays({
+  name: "zz", slots: 11,
+  colors: ["#a78bfa", "#c4b5fd", "#fbbf24", "#f97316", "#38bdf8", "#facc15", "#e879f9", "#e879f9", "#e879f9", "#e879f9", "#38bdf8"],
+  width: 2.5, line_style: "solid", opacity: 0.95,
+  words: ["ABCD", "Gartley", "BAT", "BUTTERFLY", "Crab", "Cypher", "Shark", "WXY", "Target", "POC", "X", "A", "B", "C", "D"],
+  tooltip: "{{word}}", panel: "overlay"
+});
+
+// --- Soft VWAP band zones: ±2 ATR and ±4 ATR (10% opacity) ---
+plot.spans({
+  name: "band", slots: 6,
+  colors: ["#00ffd5", "#00ffd5", "#00ffd5", "#ff2bd6", "#ff2bd6", "#ff2bd6"],
+  opacity: 0.10,
+  border: { width: 0, opacity: 0.0 },
+  words: ["VWAP -2 ATR", "VWAP -4 ATR", "VWAP -6 ATR", "VWAP +2 ATR", "VWAP +4 ATR", "VWAP +6 ATR"],
+  tooltip: "{{word}}", panel: "overlay"
+});
+
+// --- EMAs ---
+output("ema21", line, overlay, { color: "#fde047", width: 1, description: "EMA 21" });
+output("ema100", line, overlay, { color: "#94a3b8", width: 1, description: "EMA 100" });
+output("ema144", line, overlay, { color: "#a78bfa", width: 1, description: "EMA 144" });
+output("ema360", line, overlay, { color: "#f97316", width: 2, description: "EMA 360" });
+output("ema667", line, overlay, { color: "#38bdf8", width: 1, description: "EMA 667" });
+output("ema800", line, overlay, { color: "#22c55e", width: 2, description: "EMA 800" });
+
+// --- VWAP lines (white) ---
+output("dvwap", line, overlay, { color: "#ffffff", width: 2, description: "Daily VWAP" });
+output("wvwap", line, overlay, { color: "#e5e7eb", width: 1.5, line_style: "dashed", description: "Weekly VWAP" });
+output("mvwap", line, overlay, { color: "#d1d5db", width: 1.5, line_style: "dotted", description: "Monthly VWAP" });
+
+// --- Session opens (white) ---
+output("dopen", line, overlay, { color: "#ffffff", width: 1, line_style: "dashed", description: "Daily Open" });
+output("wopen", line, overlay, { color: "#e5e7eb", width: 1, line_style: "dashed", description: "Weekly Open" });
+output("mopen", line, overlay, { color: "#d1d5db", width: 1, line_style: "dotted", description: "Monthly Open" });
+
+// --- POC (yellow) + VAH/VAL at ±ATR from POC + POC ±2 ATR deviation bands ---
+output("poc", line, overlay, { color: "#facc15", width: 3, description: "POC" });
+output("vah", line, overlay, { color: "#fde047", width: 1.5, line_style: "dashed", description: "VAH (POC+ATR)" });
+output("val", line, overlay, { color: "#fde047", width: 1.5, line_style: "dashed", description: "VAL (POC-ATR)" });
+output("poc_up", line, overlay, { color: "#ff2bd6", width: 1.5, line_style: "dashed", description: "POC +2 ATR pink" });
+output("poc_dn", line, overlay, { color: "#00ffd5", width: 1.5, line_style: "dashed", description: "POC -2 ATR teal" });
+output("poc_lbl", shape, overlay, { color: "#facc15", shape_where: "g_poc_lbl", shape: "char", char: "P", location: "above_bar", glow: 22, description: "POC" });
+output("poc_lbl2", shape, overlay, { color: "#fde047", shape_where: "g_poc_lbl", shape: "flag", location: "above_bar", glow: 14, description: "POC" });
+
+// --- Previous day EQ (purple) + regression / std channels ---
+output("eq", line, overlay, { color: "#a855f7", width: 2, description: "Prev-day EQ" });
+output("eq_reg", line, overlay, { color: "#d8b4fe", width: 1.5, description: "EQ regression" });
+output("eq_u1", line, overlay, { color: "#00ffd5", width: 1, line_style: "dashed", description: "Reg +1σ teal" });
+output("eq_u2", line, overlay, { color: "#00ffd5", width: 1, line_style: "dotted", description: "Reg +2σ teal" });
+output("eq_d1", line, overlay, { color: "#ff2bd6", width: 1, line_style: "dashed", description: "Reg -1σ pink" });
+output("eq_d2", line, overlay, { color: "#ff2bd6", width: 1, line_style: "dotted", description: "Reg -2σ pink" });
+
+// Session open fib helpers (common PA levels from daily open)
+output("do_382", line, overlay, { color: "#c4b5fd", width: 1, line_style: "dotted", description: "DayOpen +0.382 range" });
+output("do_618", line, overlay, { color: "#c4b5fd", width: 1, line_style: "dotted", description: "DayOpen +0.618 range" });
+output("do_n382", line, overlay, { color: "#c4b5fd", width: 1, line_style: "dotted", description: "DayOpen -0.382 range" });
+output("do_n618", line, overlay, { color: "#c4b5fd", width: 1, line_style: "dotted", description: "DayOpen -0.618 range" });
+
+// --- EMA touch boxes (little) ---
+const b360t = output("b360_t", none);
+const b360b = output("b360_b", none);
+const b360l = output("b360_l", none);
+box("ema360_touch", { top: b360t, bottom: b360b, when: b360l, color: "#ef4444", opacity: 0.50, borderColor: "#ef4444", borderWidth: 1, z: 5 });
+const b800t = output("b800_t", none);
+const b800b = output("b800_b", none);
+const b800l = output("b800_l", none);
+box("ema800_touch", { top: b800t, bottom: b800b, when: b800l, color: "#22c55e", opacity: 0.50, borderColor: "#22c55e", borderWidth: 1, z: 5 });
+
+// --- Pattern letter labels ---
+output("lab_a", shape, overlay, { color: "#e879f9", shape_where: "g_a", shape: "char", char: "A", location: "above_bar", glow: 8, description: "A" });
