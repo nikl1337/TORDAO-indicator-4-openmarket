@@ -1,0 +1,136 @@
+      Xi = p0i; Ai = p1i; Bi = p2i; Ci = p3i; Di = p4i;
+      // prefer freshest window ending at latest pivot
+      X = p1px; A = p2px; B = p3px; C = p4px; D = p5px;
+      Xt = p1t; At = p2t; Bt = p3t; Ct = p4t; Dt = p5t;
+      Xi = p1i; Ai = p2i; Bi = p3i; Ci = p4i; Di = p5i;
+    }
+    const XA = Math.abs(A - X);
+    const AB = Math.abs(B - A);
+    const BC = Math.abs(C - B);
+    const CD = Math.abs(D - C);
+    const AD = Math.abs(D - A);
+    if (XA > 0.0 && AB > 0.0 && BC > 0.0 && CD > 0.0) {
+      const rAB = AB / XA;
+      const rBC = BC / AB;
+      const rCD = CD / BC;
+      const rAD = AD / XA;
+      const tol = fibTol > 0.10 ? fibTol : 0.15;
+
+      // score vs ideal ratios — pick best match (Bat no longer always wins)
+      // ideal: AB, BC-mid, AD
+      // kinds: 2 Gartley, 3 BAT, 4 Butterfly, 5 Crab, 6 Cypher, 7 Shark
+      let bestKind: i32 = 0;
+      let bestScore: f64 = 1e99;
+
+      // helper inline scores
+      // Gartley: AB~0.618, BC~0.618, AD~0.786
+      if (inR(rAB, 0.50, 0.75, tol) && inR(rBC, 0.30, 1.00, tol) && inR(rAD, 0.65, 0.95, tol)) {
+        const s = Math.abs(rAB - 0.618) + Math.abs(rAD - 0.786);
+        if (s < bestScore) { bestScore = s; bestKind = 2; }
+      }
+      // BAT: AB~0.382-0.50, AD~0.886
+      if (inR(rAB, 0.30, 0.60, tol) && inR(rBC, 0.30, 1.00, tol) && inR(rAD, 0.78, 1.00, tol)) {
+        const s = Math.abs(rAB - 0.45) + Math.abs(rAD - 0.886);
+        if (s < bestScore) { bestScore = s; bestKind = 3; }
+      }
+      // Butterfly: AB~0.786, AD~1.27
+      if (inR(rAB, 0.65, 0.95, tol) && inR(rBC, 0.30, 1.00, tol) && inR(rAD, 1.10, 1.50, tol)) {
+        const s = Math.abs(rAB - 0.786) + Math.abs(rAD - 1.27);
+        if (s < bestScore) { bestScore = s; bestKind = 4; }
+      }
+      // Crab: AD~1.618
+      if (inR(rAB, 0.30, 0.75, tol) && inR(rBC, 0.30, 1.00, tol) && inR(rAD, 1.40, 1.90, tol)) {
+        const s = Math.abs(rAD - 1.618);
+        if (s < bestScore) { bestScore = s; bestKind = 5; }
+      }
+      // Cypher: BC extended, AD~0.786
+      if (inR(rAB, 0.30, 0.75, tol) && inR(rBC, 1.00, 1.55, tol) && inR(rAD, 0.65, 0.95, tol)) {
+        const s = Math.abs(rBC - 1.27) + Math.abs(rAD - 0.786);
+        if (s < bestScore) { bestScore = s; bestKind = 6; }
+      }
+      // Shark: BC extended, AD~0.886-1.13
+      if (inR(rAB, 0.30, 0.75, tol) && inR(rBC, 1.00, 1.80, tol) && inR(rAD, 0.75, 1.25, tol)) {
+        const s = Math.abs(rAD - 1.00);
+        if (s < bestScore) { bestScore = s; bestKind = 7; }
+      }
+
+      const kind = bestKind;
+      let nearOnly = false;
+      let useKind = kind;
+      if (useKind == 0) {
+        // XABC matches but D is not at the ideal AD yet → "near", not done.
+        let ns: f64 = 1e99;
+        let nk: i32 = 0;
+        if (inR(rAB, 0.50, 0.75, tol) && inR(rBC, 0.30, 1.00, tol)) {
+          const s = Math.abs(rAB - 0.618); if (s < ns) { ns = s; nk = 2; }
+        }
+        if (inR(rAB, 0.30, 0.60, tol) && inR(rBC, 0.30, 1.00, tol)) {
+          const s = Math.abs(rAB - 0.45); if (s < ns) { ns = s; nk = 3; }
+        }
+        if (inR(rAB, 0.65, 0.95, tol) && inR(rBC, 0.30, 1.00, tol)) {
+          const s = Math.abs(rAB - 0.786); if (s < ns) { ns = s; nk = 4; }
+        }
+        if (inR(rAB, 0.30, 0.75, tol) && inR(rBC, 0.30, 1.00, tol) && rAD > 1.05) {
+          const s = Math.abs(rAD - 1.618); if (s < ns) { ns = s; nk = 5; }
+        }
+        if (inR(rAB, 0.30, 0.75, tol) && inR(rBC, 1.00, 1.55, tol)) {
+          const s = Math.abs(rBC - 1.27); if (s < ns) { ns = s; nk = 6; }
+        }
+        if (inR(rAB, 0.30, 0.75, tol) && inR(rBC, 1.00, 1.80, tol)) {
+          const s = Math.abs(rBC - 1.13); if (s < ns) { ns = s; nk = 7; }
+        }
+        if (nk > 0) { useKind = nk; nearOnly = true; }
+      }
+      if (useKind > 0) {
+        patOn = true; patDone = !nearOnly; patAge = 0; patN = 5; patKind = useKind;
+        patBull = D < A;
+        a0px = X; a0t = Xt; a0i = Xi;
+        a1px = A; a1t = At; a1i = Ai;
+        a2px = B; a2t = Bt; a2i = Bi;
+        a3px = C; a3t = Ct; a3i = Ci;
+        a4px = D; a4t = Dt; a4i = Di;
+      }
+    }
+  }
+
+  // Markers only on the confirmation bar (patAge == 0). Rays stay for keepBars.
+  // Shape series are written so the overlay is not "no values".
+  if (patOn && shHarm) {
+    const bull = patBull;
+    const fresh = patAge == 0;
+    const dPxMark = patN >= 5 ? a4px : a3px;
+    const markPx = !isNaN(dPxMark) ? dPxMark : c;
+
+    if (fresh) {
+      if (patN >= 5) {
+        if (!isNaN(a0px)) { out_g_x(1.0); out_lab_x(a0px); }
+        if (!isNaN(a1px)) { out_g_a(1.0); out_lab_a(a1px); }
+        if (!isNaN(a2px)) { out_g_b(1.0); out_lab_b(a2px); }
+        if (!isNaN(a3px)) { out_g_c(1.0); out_lab_c(a3px); }
+        if (!isNaN(a4px)) { out_g_d(1.0); out_lab_d(a4px); }
+      } else {
+        if (!isNaN(a0px)) { out_g_a(1.0); out_lab_a(a0px); }
+        if (!isNaN(a1px)) { out_g_b(1.0); out_lab_b(a1px); }
+        if (!isNaN(a2px)) { out_g_c(1.0); out_lab_c(a2px); }
+        if (!isNaN(a3px)) { out_g_d(1.0); out_lab_d(a3px); }
+      }
+      if (patDone) { out_g_done(1.0); out_n_done(markPx); }
+      else { out_g_near(1.0); out_n_near(markPx); }
+
+      if (patKind == 3) { if (bull) { out_g_bat_bull(1.0); out_n_bat(markPx); out_n_bat2(markPx); } else { out_g_bat_bear(1.0); out_n_bat_r(markPx); out_n_bat2r(markPx); } }
+      if (patKind == 4) { if (bull) { out_g_fly_bull(1.0); out_n_fly(markPx); out_n_fly2(markPx); } else { out_g_fly_bear(1.0); out_n_fly_r(markPx); out_n_fly2r(markPx); } }
+      if (patKind == 2) { if (bull) { out_g_gart_bull(1.0); out_n_gart(markPx); } else { out_g_gart_bear(1.0); out_n_gart_r(markPx); } }
+      if (patKind == 5) { if (bull) { out_g_crab_bull(1.0); out_n_crab(markPx); } else { out_g_crab_bear(1.0); out_n_crab_r(markPx); } }
+      if (patKind == 6) { if (bull) { out_g_cyph_bull(1.0); out_n_cyph(markPx); } else { out_g_cyph_bear(1.0); out_n_cyph_r(markPx); } }
+      if (patKind == 7) { if (bull) { out_g_shark_bull(1.0); out_n_shark(markPx); } else { out_g_shark_bear(1.0); out_n_shark_r(markPx); } }
+      if (patKind == 1) { if (bull) { out_g_abcd_bull(1.0); out_n_abcd(markPx); } else { out_g_abcd_bear(1.0); out_n_abcd_r(markPx); } }
+      if (patKind == 8) { if (bull) { out_g_wxy_bull(1.0); out_n_wxy(markPx); } else { out_g_wxy_bear(1.0); out_n_wxy_r(markPx); } }
+    } else {
+      // Keep a numeric value on the active pattern so the series is not empty,
+      // but leave the gate at 0 so the marker does not repeat every bar.
+      if (patKind == 3) { if (bull) out_n_bat(markPx); else out_n_bat_r(markPx); }
+      if (patKind == 4) { if (bull) out_n_fly(markPx); else out_n_fly_r(markPx); }
+      if (patKind == 2) { if (bull) out_n_gart(markPx); else out_n_gart_r(markPx); }
+      if (patKind == 5) { if (bull) out_n_crab(markPx); else out_n_crab_r(markPx); }
+      if (patKind == 6) { if (bull) out_n_cyph(markPx); else out_n_cyph_r(markPx); }
+      if (patKind == 7) { if (bull) out_n_shark(markPx); else out_n_shark_r(markPx); }
