@@ -1,0 +1,75 @@
+output("lab_b", shape, overlay, { color: "#e879f9", shape_where: "g_b", shape: "char", char: "B", location: "below_bar", glow: 8, description: "B" });
+output("lab_c", shape, overlay, { color: "#e879f9", shape_where: "g_c", shape: "char", char: "C", location: "above_bar", glow: 8, description: "C" });
+output("lab_d", shape, overlay, { color: "#e879f9", shape_where: "g_d", shape: "char", char: "D", location: "below_bar", glow: 8, description: "D" });
+output("lab_x", shape, overlay, { color: "#38bdf8", shape_where: "g_x", shape: "char", char: "X", location: "above_bar", glow: 8, description: "X" });
+
+// --- Pattern name markers (green bull / red bear) + bigger BAT/BUTTERFLY ---
+output("n_bat", shape, overlay, { color: "#22c55e", shape_where: "g_bat_bull", shape: "flag", location: "above_bar", glow: 36, description: "BAT bull" });
+output("n_bat_r", shape, overlay, { color: "#ef4444", shape_where: "g_bat_bear", shape: "flag", location: "below_bar", glow: 36, description: "BAT bear" });
+output("n_fly", shape, overlay, { color: "#22c55e", shape_where: "g_fly_bull", shape: "flag", location: "above_bar", glow: 36, description: "BUTTERFLY bull" });
+output("n_fly_r", shape, overlay, { color: "#ef4444", shape_where: "g_fly_bear", shape: "flag", location: "below_bar", glow: 36, description: "BUTTERFLY bear" });
+output("n_bat2", shape, overlay, { color: "#86efac", shape_where: "g_bat_bull", shape: "circle", location: "above_bar", glow: 40, description: "BAT" });
+output("n_fly2", shape, overlay, { color: "#86efac", shape_where: "g_fly_bull", shape: "circle", location: "above_bar", glow: 40, description: "BUTTERFLY" });
+output("n_bat2r", shape, overlay, { color: "#fca5a5", shape_where: "g_bat_bear", shape: "circle", location: "below_bar", glow: 40, description: "BAT" });
+output("n_fly2r", shape, overlay, { color: "#fca5a5", shape_where: "g_fly_bear", shape: "circle", location: "below_bar", glow: 40, description: "BUTTERFLY" });
+
+output("n_gart", shape, overlay, { color: "#22c55e", shape_where: "g_gart_bull", shape: "diamond", location: "above_bar", glow: 12, description: "Gartley" });
+output("n_gart_r", shape, overlay, { color: "#ef4444", shape_where: "g_gart_bear", shape: "diamond", location: "below_bar", glow: 12, description: "Gartley" });
+output("n_crab", shape, overlay, { color: "#22c55e", shape_where: "g_crab_bull", shape: "diamond", location: "above_bar", glow: 12, description: "Crab" });
+output("n_crab_r", shape, overlay, { color: "#ef4444", shape_where: "g_crab_bear", shape: "diamond", location: "below_bar", glow: 12, description: "Crab" });
+output("n_cyph", shape, overlay, { color: "#22c55e", shape_where: "g_cyph_bull", shape: "diamond", location: "above_bar", glow: 12, description: "Cypher" });
+output("n_cyph_r", shape, overlay, { color: "#ef4444", shape_where: "g_cyph_bear", shape: "diamond", location: "below_bar", glow: 12, description: "Cypher" });
+output("n_shark", shape, overlay, { color: "#22c55e", shape_where: "g_shark_bull", shape: "diamond", location: "above_bar", glow: 12, description: "Shark" });
+output("n_shark_r", shape, overlay, { color: "#ef4444", shape_where: "g_shark_bear", shape: "diamond", location: "below_bar", glow: 12, description: "Shark" });
+// FIXED: triangle -> triangle_up / triangle_down
+output("n_abcd", shape, overlay, { color: "#22c55e", shape_where: "g_abcd_bull", shape: "triangle_up", location: "above_bar", glow: 10, description: "ABCD" });
+output("n_abcd_r", shape, overlay, { color: "#ef4444", shape_where: "g_abcd_bear", shape: "triangle_down", location: "below_bar", glow: 10, description: "ABCD" });
+output("n_wxy", shape, overlay, { color: "#22c55e", shape_where: "g_wxy_bull", shape: "triangle_up", location: "above_bar", glow: 10, description: "WXY" });
+output("n_wxy_r", shape, overlay, { color: "#ef4444", shape_where: "g_wxy_bear", shape: "triangle_down", location: "below_bar", glow: 10, description: "WXY" });
+
+// near / done markers
+output("n_near", shape, overlay, { color: "#c4b5fd", shape_where: "g_near", shape: "circle", location: "above_bar", glow: 6, description: "near" });
+output("n_done", shape, overlay, { color: "#fbbf24", shape_where: "g_done", shape: "circle", location: "above_bar", glow: 10, description: "done" });
+
+// purple circle when price hits EQ / channel
+output("eq_hit", shape, overlay, { color: "#a855f7", shape_where: "g_eq_hit", shape: "circle", location: "above_bar", glow: 18, description: "EQ hit" });
+
+// shape gates (none)
+const g_a = output("g_a", none);
+const g_b = output("g_b", none);
+const g_c = output("g_c", none);
+const g_d = output("g_d", none);
+const g_x = output("g_x", none);
+const g_near = output("g_near", none);
+const g_done = output("g_done", none);
+const g_bat_bull = output("g_bat_bull", none);
+const g_bat_bear = output("g_bat_bear", none);
+const g_fly_bull = output("g_fly_bull", none);
+const g_fly_bear = output("g_fly_bear", none);
+const g_gart_bull = output("g_gart_bull", none);
+const g_gart_bear = output("g_gart_bear", none);
+const g_crab_bull = output("g_crab_bull", none);
+const g_crab_bear = output("g_crab_bear", none);
+const g_cyph_bull = output("g_cyph_bull", none);
+const g_cyph_bear = output("g_cyph_bear", none);
+const g_shark_bull = output("g_shark_bull", none);
+const g_shark_bear = output("g_shark_bear", none);
+const g_abcd_bull = output("g_abcd_bull", none);
+const g_abcd_bear = output("g_abcd_bear", none);
+const g_wxy_bull = output("g_wxy_bull", none);
+const g_wxy_bear = output("g_wxy_bear", none);
+const g_eq_hit = output("g_eq_hit", none);
+const g_poc_lbl = output("g_poc_lbl", none);
+
+// --- Flag lines (2 bull teal + 2 bear red) ---
+output("bf1_u", line, overlay, { color: "#00ffd5", width: 1.5, line_style: "dashed", description: "Bull flag 1 upper" });
+output("bf1_m", line, overlay, { color: "#00ffd5", width: 1, line_style: "dotted", description: "Bull flag 1 mid" });
+output("bf1_l", line, overlay, { color: "#00ffd5", width: 1.5, line_style: "dashed", description: "Bull flag 1 lower" });
+output("bf2_u", line, overlay, { color: "#2dd4bf", width: 1.5, line_style: "dashed", description: "Bull flag 2 upper" });
+output("bf2_m", line, overlay, { color: "#2dd4bf", width: 1, line_style: "dotted", description: "Bull flag 2 mid" });
+output("bf2_l", line, overlay, { color: "#2dd4bf", width: 1.5, line_style: "dashed", description: "Bull flag 2 lower" });
+output("rf1_u", line, overlay, { color: "#ef4444", width: 1.5, line_style: "dashed", description: "Bear flag 1 upper" });
+output("rf1_m", line, overlay, { color: "#ef4444", width: 1, line_style: "dotted", description: "Bear flag 1 mid" });
+output("rf1_l", line, overlay, { color: "#ef4444", width: 1.5, line_style: "dashed", description: "Bear flag 1 lower" });
+output("rf2_u", line, overlay, { color: "#f87171", width: 1.5, line_style: "dashed", description: "Bear flag 2 upper" });
+output("rf2_m", line, overlay, { color: "#f87171", width: 1, line_style: "dotted", description: "Bear flag 2 mid" });
