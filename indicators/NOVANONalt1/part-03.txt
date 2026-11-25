@@ -1,0 +1,195 @@
+  const dv = dayVwap.update(o, h, l, c, vol, tsMs);
+  const wv = weekVwap.update(o, h, l, c, vol, tsMs);
+  const mv = monthVwap.update(o, h, l, c, vol, tsMs);
+  out_dvwap(shVwap && !isNaN(dv) ? dv : NaN);
+  out_wvwap(shVwap && !isNaN(wv) ? wv : NaN);
+  out_mvwap(shVwap && !isNaN(mv) ? mv : NaN);
+
+  // Daily VWAP deviation bands: ±2 / ±4 / ±6 ATR
+  if (shBands && !isNaN(dv) && !isNaN(atr) && atr > 0.0 && dv > 0.0) {
+    const a2 = atr * 2.0;
+    const a4 = atr * 4.0;
+    const a6 = atr * 6.0;
+    const half = dv * 0.0005;
+    const tStart = t - barDt * 2.0;
+    const tEnd = t + barDt * 8.0;
+    // 0-2 teal below, 3-5 pink above
+    out_band_span_at(0, (dv - a2) + half, (dv - a2) - half, tStart, tEnd, 0, 0, 0);
+    out_band_span_at(1, (dv - a4) + half, (dv - a4) - half, tStart, tEnd, 1, 1, 0);
+    out_band_span_at(2, (dv - a6) + half, (dv - a6) - half, tStart, tEnd, 2, 2, 0);
+    out_band_span_at(3, (dv + a2) + half, (dv + a2) - half, tStart, tEnd, 3, 3, 0);
+    out_band_span_at(4, (dv + a4) + half, (dv + a4) - half, tStart, tEnd, 4, 4, 0);
+    out_band_span_at(5, (dv + a6) + half, (dv + a6) - half, tStart, tEnd, 5, 5, 0);
+  } else {
+    out_band_span_at(0, NaN, NaN, 0.0, 0.0, 0, 0, 0);
+    out_band_span_at(1, NaN, NaN, 0.0, 0.0, 1, 1, 0);
+    out_band_span_at(2, NaN, NaN, 0.0, 0.0, 2, 2, 0);
+    out_band_span_at(3, NaN, NaN, 0.0, 0.0, 3, 3, 0);
+    out_band_span_at(4, NaN, NaN, 0.0, 0.0, 4, 4, 0);
+    out_band_span_at(5, NaN, NaN, 0.0, 0.0, 5, 5, 0);
+  }
+
+  // ring for POC / regression
+  rCur = (rCur + 1) % RMAX;
+  rHi[rCur] = h; rLo[rCur] = l; rCl[rCur] = c;
+  rTyp[rCur] = (h + l + c) / 3.0;
+  rVol[rCur] = vol > 0.0 ? vol : 1.0;
+  if (rN < RMAX) rN += 1;
+
+  // Volume-profile POC (yellow). VAH/VAL from va_pct, then clamped to 1–2 ATR off POC.
+  out_g_poc_lbl(0.0);
+  out_poc_lbl(NaN);
+  out_poc_lbl2(NaN);
+  out_zz_ray_at(5, NaN, NaN, 0.0, 0.0, 9, 5, 0);
+  if (shPoc && rN >= 8) {
+    const n = pocLb < rN ? pocLb : rN;
+    let loP: f64 = 1e99;
+    let hiP: f64 = -1e99;
+    for (let k = 0; k < n; k += 1) {
+      const j = (rCur - k + RMAX * 4) % RMAX;
+      const tp = rTyp[j];
+      if (tp < loP) loP = tp;
+      if (tp > hiP) hiP = tp;
+    }
+    const span = hiP - loP;
+    let mid = (hiP + loP) * 0.5;
+    if (span > 0.0) {
+      for (let b = 0; b < PBINS; b += 1) pocBins[b] = 0.0;
+      for (let k = 0; k < n; k += 1) {
+        const j = (rCur - k + RMAX * 4) % RMAX;
+        let bi = i32(Math.floor((rTyp[j] - loP) / span * f64(PBINS)));
+        if (bi < 0) bi = 0;
+        if (bi >= PBINS) bi = PBINS - 1;
+        pocBins[bi] = pocBins[bi] + rVol[j];
+      }
+      let bestB: i32 = 0;
+      let bestV: f64 = -1.0;
+      let totV: f64 = 0.0;
+      for (let b = 0; b < PBINS; b += 1) {
+        totV += pocBins[b];
+        if (pocBins[b] > bestV) { bestV = pocBins[b]; bestB = b; }
+      }
+      mid = loP + (f64(bestB) + 0.5) / f64(PBINS) * span;
+      // Walk out from the POC bin until va_pct of volume is covered.
+      let acc: f64 = pocBins[bestB];
+      let loB: i32 = bestB;
+      let hiB: i32 = bestB;
+      const need = totV * (vaPct / 100.0);
+      while (acc < need && (loB > 0 || hiB < PBINS - 1)) {
+        const left = loB > 0 ? pocBins[loB - 1] : -1.0;
+        const right = hiB < PBINS - 1 ? pocBins[hiB + 1] : -1.0;
+        if (right >= left) { hiB += 1; acc += pocBins[hiB]; }
+        else { loB -= 1; acc += pocBins[loB]; }
+      }
+      let vaUp = (loP + (f64(hiB) + 1.0) / f64(PBINS) * span) - mid;
+      let vaDn = mid - (loP + f64(loB) / f64(PBINS) * span);
+      const a1 = (!isNaN(atr) && atr > 0.0) ? atr : span * 0.25;
+      if (vaUp < a1) vaUp = a1;
+      if (vaDn < a1) vaDn = a1;
+      if (vaUp > a1 * 2.0) vaUp = a1 * 2.0;
+      if (vaDn > a1 * 2.0) vaDn = a1 * 2.0;
+      out_poc(mid);
+      out_vah(mid + vaUp);
+      out_val(mid - vaDn);
+    } else {
+      const a1 = (!isNaN(atr) && atr > 0.0) ? atr : (mid * 0.002);
+      out_poc(mid);
+      out_vah(mid + a1);
+      out_val(mid - a1);
+    }
+    const pocOff2 = (!isNaN(atr) && atr > 0.0) ? atr * 2.0 : mid * 0.008;
+    out_poc_up(mid + pocOff2);
+    out_poc_dn(mid - pocOff2);
+    // One yellow "POC" ray for the current day — not a marker on every bar.
+    const tLab0 = dayStartT > 0.0 ? dayStartT : t;
+    out_zz_ray_at(5, mid, mid, tLab0, t + (barDt > 0.0 ? barDt * 4.0 : 240.0), 9, 5, 0);
+    const hitPoc = l <= mid && h >= mid;
+    if (hitPoc) {
+      out_g_poc_lbl(1.0);
+      out_poc_lbl(mid);
+      out_poc_lbl2(mid);
+    }
+  } else {
+    out_poc(NaN); out_vah(NaN); out_val(NaN);
+    out_poc_up(NaN); out_poc_dn(NaN);
+  }
+
+  out_g_eq_hit(0.0);
+  out_eq_hit(NaN);
+  if (shEq && !isNaN(prevDayEq)) {
+    out_eq(prevDayEq);
+
+    let sigma: f64 = 0.0;
+    let regNow: f64 = NaN;
+    if (rN >= 8) {
+      const n = eqRegLb < rN ? eqRegLb : rN;
+      const nf = f64(n);
+      let sumX: f64 = 0.0;
+      let sumY: f64 = 0.0;
+      let sumXX: f64 = 0.0;
+      let sumXY: f64 = 0.0;
+      for (let k = 0; k < n; k += 1) {
+        const j = (rCur - (n - 1 - k) + RMAX * 4) % RMAX;
+        const x = f64(k);
+        const y = rCl[j];
+        sumX += x; sumY += y; sumXX += x * x; sumXY += x * y;
+      }
+      const den = nf * sumXX - sumX * sumX;
+      let slope: f64 = 0.0;
+      let intercept: f64 = sumY / nf;
+      if (Math.abs(den) > 1e-12) {
+        slope = (nf * sumXY - sumX * sumY) / den;
+        intercept = (sumY - slope * sumX) / nf;
+      }
+      regNow = intercept + slope * f64(n - 1);
+      let varSum: f64 = 0.0;
+      for (let k = 0; k < n; k += 1) {
+        const j = (rCur - (n - 1 - k) + RMAX * 4) % RMAX;
+        const fit = intercept + slope * f64(k);
+        const d = rCl[j] - fit;
+        varSum += d * d;
+      }
+      sigma = Math.sqrt(varSum / nf);
+    }
+    out_eq_reg(regNow);
+    if (!isNaN(regNow) && sigma > 0.0) {
+      out_eq_u1(regNow + sigma);
+      out_eq_u2(regNow + sigma * 2.0);
+      out_eq_d1(regNow - sigma);
+      out_eq_d2(regNow - sigma * 2.0);
+    } else {
+      out_eq_u1(NaN); out_eq_u2(NaN); out_eq_d1(NaN); out_eq_d2(NaN);
+    }
+
+    const hitTol = !isNaN(atr) && atr > 0.0 ? atr * 0.15 : (c * 0.0005);
+    const hitEq = Math.abs(c - prevDayEq) <= hitTol || (l <= prevDayEq && h >= prevDayEq);
+    let hitBand = false;
+    if (!isNaN(regNow) && sigma > 0.0) {
+      const u2 = regNow + sigma * 2.0;
+      const d2 = regNow - sigma * 2.0;
+      hitBand = (l <= u2 && h >= u2) || (l <= d2 && h >= d2);
+    }
+    if (hitEq || hitBand) {
+      out_g_eq_hit(1.0);
+      out_eq_hit(c);
+    }
+  } else {
+    out_eq(NaN);
+    out_eq_reg(NaN);
+    out_eq_u1(NaN); out_eq_u2(NaN); out_eq_d1(NaN); out_eq_d2(NaN);
+  }
+
+  // EMAs
+  const v21 = e21.update(c);
+  const v100 = e100.update(c);
+  const v144 = e144.update(c);
+  const v360 = e360.update(c);
+  const v667 = e667.update(c);
+  const v800 = e800.update(c);
+  out_ema21(shEma ? v21 : NaN);
+  out_ema100(shEma ? v100 : NaN);
+  out_ema144(shEma ? v144 : NaN);
+  out_ema360(shEma ? v360 : NaN);
+  out_ema667(shEma ? v667 : NaN);
+  out_ema800(shEma ? v800 : NaN);
+
