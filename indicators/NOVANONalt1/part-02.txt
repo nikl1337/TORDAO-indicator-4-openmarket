@@ -1,0 +1,205 @@
+output("rf2_l", line, overlay, { color: "#f87171", width: 1.5, line_style: "dashed", description: "Bear flag 2 lower" });
+
+// --- kits & state ---
+let sw = new Swings(3, 3);
+let e21 = new Ema(21);
+let e100 = new Ema(100);
+let e144 = new Ema(144);
+let e360 = new Ema(360);
+let e667 = new Ema(667);
+let e800 = new Ema(800);
+let dayVwap = new Vwap("day");
+let weekVwap = new Vwap("week");
+let monthVwap = new Vwap("month");
+
+let right: i32 = 3;
+let fibTol: f64 = 0.10;
+let keepBars: i32 = 220;
+let flagPoleAtr: f64 = 1.8;
+let pocLb: i32 = 96;
+let vaPct: f64 = 70.0;
+let eqRegLb: i32 = 48;
+let idx: i32 = 0;
+
+// pivot ring
+let p0px: f64 = NaN; let p0t: f64 = 0.0; let p0i: i32 = 0;
+let p1px: f64 = NaN; let p1t: f64 = 0.0; let p1i: i32 = 0;
+let p2px: f64 = NaN; let p2t: f64 = 0.0; let p2i: i32 = 0;
+let p3px: f64 = NaN; let p3t: f64 = 0.0; let p3i: i32 = 0;
+let p4px: f64 = NaN; let p4t: f64 = 0.0; let p4i: i32 = 0;
+let p5px: f64 = NaN; let p5t: f64 = 0.0; let p5i: i32 = 0;
+let pivN: i32 = 0;
+
+// active pattern
+let a0px: f64 = NaN; let a0t: f64 = 0.0; let a0i: i32 = -1;
+let a1px: f64 = NaN; let a1t: f64 = 0.0; let a1i: i32 = -1;
+let a2px: f64 = NaN; let a2t: f64 = 0.0; let a2i: i32 = -1;
+let a3px: f64 = NaN; let a3t: f64 = 0.0; let a3i: i32 = -1;
+let a4px: f64 = NaN; let a4t: f64 = 0.0; let a4i: i32 = -1;
+let patN: i32 = 0;
+let patKind: i32 = 0;
+let patOn: bool = false;
+let patDone: bool = false;
+let patAge: i32 = 0;
+let patBull: bool = true;
+
+let atr: f64 = NaN;
+let prevC: f64 = NaN;
+let prevT: f64 = NaN;
+let barDt: f64 = 60.0;
+
+// session opens
+let dayOpen: f64 = NaN;
+let weekOpen: f64 = NaN;
+let monthOpen: f64 = NaN;
+let lastDayKey: i32 = -1;
+let lastWeekKey: i32 = -1;
+let lastMonthKey: i32 = -1;
+
+// prev day high/low/eq
+let dayHi: f64 = NaN;
+let dayLo: f64 = NaN;
+let prevDayEq: f64 = NaN;
+let prevDayRange: f64 = NaN;
+let curDayHi: f64 = NaN;
+let curDayLo: f64 = NaN;
+let dayStarts: i32 = 0;
+let dayStartT: f64 = 0.0;
+
+// flags
+let bfU0: f64 = NaN; let bfM0: f64 = NaN; let bfL0: f64 = NaN; let bfA0: i32 = 9999;
+let bfU1: f64 = NaN; let bfM1: f64 = NaN; let bfL1: f64 = NaN; let bfA1: i32 = 9999;
+let rfU0: f64 = NaN; let rfM0: f64 = NaN; let rfL0: f64 = NaN; let rfA0: i32 = 9999;
+let rfU1: f64 = NaN; let rfM1: f64 = NaN; let rfL1: f64 = NaN; let rfA1: i32 = 9999;
+
+// rings
+const FMAX: i32 = 48;
+let fHi = new StaticArray<f64>(48);
+let fLo = new StaticArray<f64>(48);
+let fN: i32 = 0;
+let fCur: i32 = 0;
+
+const RMAX: i32 = 320;
+let rHi = new StaticArray<f64>(320);
+let rLo = new StaticArray<f64>(320);
+let rCl = new StaticArray<f64>(320);
+let rTyp = new StaticArray<f64>(320);
+let rVol = new StaticArray<f64>(320);
+let rN: i32 = 0;
+let rCur: i32 = 0;
+const PBINS: i32 = 24;
+let pocBins = new StaticArray<f64>(24);
+
+function inR(x: f64, a: f64, b: f64, tol: f64): bool {
+  const lo = a < b ? a : b;
+  const hi = a < b ? b : a;
+  return x >= lo * (1.0 - tol) && x <= hi * (1.0 + tol);
+}
+
+function dayKey(ts: f64): i32 {
+  return i32(Math.floor(ts / 86400.0));
+}
+function weekKey(ts: f64): i32 {
+  // Monday 00:00 UTC. Unix epoch is Thursday, so shift back 4 days.
+  return i32(Math.floor((ts - 345600.0) / 604800.0));
+}
+function monthKey(ts: f64): i32 {
+  // Calendar year*12+month (UTC), Howard Hinnant civil_from_days.
+  let z: f64 = Math.floor(ts / 86400.0) + 719468.0;
+  const era: f64 = Math.floor((z >= 0.0 ? z : z - 146096.0) / 146097.0);
+  const doe: f64 = z - era * 146097.0;
+  const yoe: f64 = Math.floor((doe - Math.floor(doe / 1460.0) + Math.floor(doe / 36524.0) - Math.floor(doe / 146096.0)) / 365.0);
+  let y: f64 = yoe + era * 400.0;
+  const doy: f64 = doe - (365.0 * yoe + Math.floor(yoe / 4.0) - Math.floor(yoe / 100.0));
+  const mp: f64 = Math.floor((5.0 * doy + 2.0) / 153.0);
+  const m: f64 = mp < 10.0 ? mp + 3.0 : mp - 9.0;
+  if (m <= 2.0) y += 1.0;
+  return i32(y * 12.0 + m);
+}
+
+function onStart(): void {
+  right = i32(p_swing_len());
+  if (right < 2) right = 2;
+  if (right > 12) right = 12;
+  sw = new Swings(right, right);
+  e21 = new Ema(21); e100 = new Ema(100); e144 = new Ema(144);
+  e360 = new Ema(360); e667 = new Ema(667); e800 = new Ema(800);
+  dayVwap = new Vwap("day");
+  weekVwap = new Vwap("week");
+  monthVwap = new Vwap("month");
+  fibTol = p_fib_tol();
+  keepBars = i32(p_keep_bars());
+  flagPoleAtr = p_flag_pole_atr();
+  pocLb = i32(p_poc_lb());
+  vaPct = p_va_pct();
+  eqRegLb = i32(p_eq_reg_lb());
+  pivN = 0; idx = 0; patOn = false; patDone = false; patAge = 0; patN = 0; patKind = 0;
+  atr = NaN; prevC = NaN; prevT = NaN;
+  dayOpen = NaN; weekOpen = NaN; monthOpen = NaN;
+  lastDayKey = -1; lastWeekKey = -1; lastMonthKey = -1;
+  dayHi = NaN; dayLo = NaN; prevDayEq = NaN; prevDayRange = NaN;
+  curDayHi = NaN; curDayLo = NaN;
+  dayStarts = 0; dayStartT = 0.0;
+  bfA0 = 9999; bfA1 = 9999; rfA0 = 9999; rfA1 = 9999;
+  fN = 0; fCur = 0; rN = 0; rCur = 0;
+}
+
+function onBar(): void {
+  const h = bar.high(); const l = bar.low(); const c = bar.close(); const t = bar.time();
+  const o = bar.open(); const vol = bar.volume(); const tsMs = t * 1000.0;
+
+  const shEma = pb_show_ema();
+  const shBox = pb_show_ema_box();
+  const shVwap = pb_show_vwap();
+  const shOpen = pb_show_open();
+  const shBands = pb_show_bands();
+  const shFlag = pb_show_flags();
+  const shHarm = pb_show_harm();
+  const shZz = pb_show_zz();
+  const shPoc = pb_show_poc();
+  const shEq = pb_show_eq();
+
+  if (!isNaN(prevT) && t > prevT) barDt = t - prevT;
+  prevT = t;
+  const tr = isNaN(prevC) ? (h - l) : Math.max(h - l, Math.max(Math.abs(h - prevC), Math.abs(l - prevC)));
+  atr = isNaN(atr) ? tr : atr + (tr - atr) * (1.0 / 14.0);
+  prevC = c;
+
+  // session opens + prev day EQ
+  const dk = dayKey(t);
+  const wk = weekKey(t);
+  const mk = monthKey(t);
+  if (dk != lastDayKey) {
+    // First completed chunk of history is often a partial day — do not use it as prev EQ.
+    if (dayStarts >= 1 && !isNaN(curDayHi) && !isNaN(curDayLo)) {
+      dayHi = curDayHi; dayLo = curDayLo;
+      prevDayEq = (dayHi + dayLo) * 0.5;
+      prevDayRange = dayHi - dayLo;
+    }
+    dayOpen = o;
+    curDayHi = h; curDayLo = l;
+    dayStartT = t;
+    dayStarts += 1;
+    lastDayKey = dk;
+  } else {
+    if (isNaN(curDayHi) || h > curDayHi) curDayHi = h;
+    if (isNaN(curDayLo) || l < curDayLo) curDayLo = l;
+  }
+  if (wk != lastWeekKey) { weekOpen = o; lastWeekKey = wk; }
+  if (mk != lastMonthKey) { monthOpen = o; lastMonthKey = mk; }
+
+  out_dopen(shOpen && !isNaN(dayOpen) ? dayOpen : NaN);
+  out_wopen(shOpen && !isNaN(weekOpen) ? weekOpen : NaN);
+  out_mopen(shOpen && !isNaN(monthOpen) ? monthOpen : NaN);
+
+  // fib levels from day open using prev day range (common PA)
+  if (shOpen && !isNaN(dayOpen) && !isNaN(prevDayRange) && prevDayRange > 0.0) {
+    out_do_382(dayOpen + prevDayRange * 0.382);
+    out_do_618(dayOpen + prevDayRange * 0.618);
+    out_do_n382(dayOpen - prevDayRange * 0.382);
+    out_do_n618(dayOpen - prevDayRange * 0.618);
+  } else {
+    out_do_382(NaN); out_do_618(NaN); out_do_n382(NaN); out_do_n618(NaN);
+  }
+
+  // VWAP multi
