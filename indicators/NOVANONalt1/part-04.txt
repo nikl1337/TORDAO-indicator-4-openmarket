@@ -1,0 +1,169 @@
+  // little boxes on 360 (red) / 800 (green)
+  const touch360 = shBox && !isNaN(v360) && l <= v360 * 1.001 && h >= v360 * 0.999;
+  const touch800 = shBox && !isNaN(v800) && l <= v800 * 1.001 && h >= v800 * 0.999;
+  if (touch360) {
+    const band = Math.max(Math.abs(v360) * 0.002, (h - l) * 0.4);
+    out_b360_t(v360 + band); out_b360_b(v360 - band); out_b360_l(1.0);
+  } else {
+    out_b360_t(NaN); out_b360_b(NaN); out_b360_l(0.0);
+  }
+  if (touch800) {
+    const band = Math.max(Math.abs(v800) * 0.002, (h - l) * 0.4);
+    out_b800_t(v800 + band); out_b800_b(v800 - band); out_b800_l(1.0);
+  } else {
+    out_b800_t(NaN); out_b800_b(NaN); out_b800_l(0.0);
+  }
+
+  // swing pivots
+  sw.update(h, l);
+  if (sw.newHigh()) {
+    const px = sw.lastHigh();
+    p0px = p1px; p0t = p1t; p0i = p1i;
+    p1px = p2px; p1t = p2t; p1i = p2i;
+    p2px = p3px; p2t = p3t; p2i = p3i;
+    p3px = p4px; p3t = p4t; p3i = p4i;
+    p4px = p5px; p4t = p5t; p4i = p5i;
+    p5px = px; p5t = t - f64(right) * (barDt > 0.0 ? barDt : 60.0); p5i = idx - right;
+    if (pivN < 6) pivN += 1;
+  }
+  if (sw.newLow()) {
+    const px = sw.lastLow();
+    p0px = p1px; p0t = p1t; p0i = p1i;
+    p1px = p2px; p1t = p2t; p1i = p2i;
+    p2px = p3px; p2t = p3t; p2i = p3i;
+    p3px = p4px; p3t = p4t; p3i = p4i;
+    p4px = p5px; p4t = p5t; p4i = p5i;
+    p5px = px; p5t = t - f64(right) * (barDt > 0.0 ? barDt : 60.0); p5i = idx - right;
+    if (pivN < 6) pivN += 1;
+  }
+
+  // flag detection
+  fCur = (fCur + 1) % FMAX;
+  fHi[fCur] = h; fLo[fCur] = l;
+  if (fN < FMAX) fN += 1;
+
+  if (shFlag && fN >= 18 && !isNaN(atr) && atr > 0.0) {
+    let maxH: f64 = -1e99; let minL: f64 = 1e99;
+    for (let k = 0; k < 12; k += 1) {
+      const j = (fCur - k + FMAX * 4) % FMAX;
+      if (fHi[j] > maxH) maxH = fHi[j];
+      if (fLo[j] < minL) minL = fLo[j];
+    }
+    let consH: f64 = -1e99; let consL: f64 = 1e99;
+    for (let k = 0; k < 6; k += 1) {
+      const j = (fCur - k + FMAX * 4) % FMAX;
+      if (fHi[j] > consH) consH = fHi[j];
+      if (fLo[j] < consL) consL = fLo[j];
+    }
+    const pole = maxH - minL;
+    const cons = consH - consL;
+    const mid = (consH + consL) * 0.5;
+    if (pole >= atr * flagPoleAtr && cons <= pole * 0.45 && cons > 0.0) {
+      const earlyJ = (fCur - 11 + FMAX * 4) % FMAX;
+      const earlyMid = (fHi[earlyJ] + fLo[earlyJ]) * 0.5;
+      const bullishPole = mid > earlyMid;
+      // Only publish after a close breaks the flag, and not on every bar.
+      if (bullishPole && c > consH && bfA0 > 12) {
+        bfU1 = bfU0; bfM1 = bfM0; bfL1 = bfL0; bfA1 = bfA0;
+        bfU0 = consH; bfM0 = mid; bfL0 = consL; bfA0 = 0;
+      } else if (!bullishPole && c < consL && rfA0 > 12) {
+        rfU1 = rfU0; rfM1 = rfM0; rfL1 = rfL0; rfA1 = rfA0;
+        rfU0 = consH; rfM0 = mid; rfL0 = consL; rfA0 = 0;
+      }
+    }
+  }
+  if (bfA0 < 9000) bfA0 += 1;
+  if (bfA1 < 9000) bfA1 += 1;
+  if (rfA0 < 9000) rfA0 += 1;
+  if (rfA1 < 9000) rfA1 += 1;
+  if (bfA0 > 400) { bfU0 = NaN; bfM0 = NaN; bfL0 = NaN; bfA0 = 9999; }
+  if (bfA1 > 400) { bfU1 = NaN; bfM1 = NaN; bfL1 = NaN; bfA1 = 9999; }
+  if (rfA0 > 400) { rfU0 = NaN; rfM0 = NaN; rfL0 = NaN; rfA0 = 9999; }
+  if (rfA1 > 400) { rfU1 = NaN; rfM1 = NaN; rfL1 = NaN; rfA1 = 9999; }
+
+  out_bf1_u(shFlag ? bfU0 : NaN); out_bf1_m(shFlag ? bfM0 : NaN); out_bf1_l(shFlag ? bfL0 : NaN);
+  out_bf2_u(shFlag ? bfU1 : NaN); out_bf2_m(shFlag ? bfM1 : NaN); out_bf2_l(shFlag ? bfL1 : NaN);
+  out_rf1_u(shFlag ? rfU0 : NaN); out_rf1_m(shFlag ? rfM0 : NaN); out_rf1_l(shFlag ? rfL0 : NaN);
+  out_rf2_u(shFlag ? rfU1 : NaN); out_rf2_m(shFlag ? rfM1 : NaN); out_rf2_l(shFlag ? rfL1 : NaN);
+
+  // harmonics — reset shape gates
+  out_g_a(0.0); out_g_b(0.0); out_g_c(0.0); out_g_d(0.0); out_g_x(0.0);
+  out_g_near(0.0); out_g_done(0.0);
+  out_g_bat_bull(0.0); out_g_bat_bear(0.0);
+  out_g_fly_bull(0.0); out_g_fly_bear(0.0);
+  out_g_gart_bull(0.0); out_g_gart_bear(0.0);
+  out_g_crab_bull(0.0); out_g_crab_bear(0.0);
+  out_g_cyph_bull(0.0); out_g_cyph_bear(0.0);
+  out_g_shark_bull(0.0); out_g_shark_bear(0.0);
+  out_g_abcd_bull(0.0); out_g_abcd_bear(0.0);
+  out_g_wxy_bull(0.0); out_g_wxy_bear(0.0);
+
+  out_zz_ray_at(0, NaN, NaN, 0.0, 0.0, 0, 0, 0);
+  out_zz_ray_at(1, NaN, NaN, 0.0, 0.0, 1, 1, 0);
+  out_zz_ray_at(2, NaN, NaN, 0.0, 0.0, 2, 2, 0);
+  out_zz_ray_at(3, NaN, NaN, 0.0, 0.0, 3, 3, 0);
+  out_zz_ray_at(4, NaN, NaN, 0.0, 0.0, 8, 4, 0);
+  out_zz_ray_at(6, NaN, NaN, 0.0, 0.0, 10, 6, 0);
+  out_zz_ray_at(7, NaN, NaN, 0.0, 0.0, 11, 7, 0);
+  out_zz_ray_at(8, NaN, NaN, 0.0, 0.0, 12, 8, 0);
+  out_zz_ray_at(9, NaN, NaN, 0.0, 0.0, 13, 9, 0);
+  out_zz_ray_at(10, NaN, NaN, 0.0, 0.0, 14, 10, 0);
+
+  out_lab_a(NaN); out_lab_b(NaN); out_lab_c(NaN); out_lab_d(NaN); out_lab_x(NaN);
+  out_n_bat(NaN); out_n_bat_r(NaN); out_n_fly(NaN); out_n_fly_r(NaN);
+  out_n_bat2(NaN); out_n_fly2(NaN); out_n_bat2r(NaN); out_n_fly2r(NaN);
+  out_n_gart(NaN); out_n_gart_r(NaN); out_n_crab(NaN); out_n_crab_r(NaN);
+  out_n_cyph(NaN); out_n_cyph_r(NaN); out_n_shark(NaN); out_n_shark_r(NaN);
+  out_n_abcd(NaN); out_n_abcd_r(NaN); out_n_wxy(NaN); out_n_wxy_r(NaN);
+  out_n_near(NaN); out_n_done(NaN);
+
+  if (patOn) {
+    patAge += 1;
+    if (patAge > keepBars) {
+      patOn = false; patDone = false; patN = 0; patKind = 0;
+    }
+  }
+
+  if (shHarm && pivN >= 4) {
+    let A = p2px; let B = p3px; let C = p4px; let D = p5px;
+    let At = p2t; let Bt = p3t; let Ct = p4t; let Dt = p5t;
+    let Ai = p2i; let Bi = p3i; let Ci = p4i; let Di = p5i;
+    if (pivN == 4 || pivN == 5) {
+      A = p1px; B = p2px; C = p3px; D = p4px;
+      At = p1t; Bt = p2t; Ct = p3t; Dt = p4t;
+      Ai = p1i; Bi = p2i; Ci = p3i; Di = p4i;
+    }
+    const ab = Math.abs(B - A);
+    const bc = Math.abs(C - B);
+    const cd = Math.abs(D - C);
+    if (ab > 0.0 && bc > 0.0 && cd > 0.0) {
+      const rBC = bc / ab;
+      const rCD = cd / ab;
+      const rYZ = cd / bc;
+      const tol4 = fibTol > 0.08 ? fibTol : 0.12;
+      const isAbcd = inR(rBC, 0.35, 0.95, tol4) && inR(rCD, 0.85, 1.40, tol4);
+      const isWxy = inR(rBC, 0.35, 1.40, tol4) && inR(rYZ, 0.55, 1.70, tol4);
+      if (isAbcd || isWxy) {
+        // only set 4-point if no 5-point already active this age window
+        if (!patOn || patN < 5 || patAge > 8) {
+          patOn = true; patDone = true; patAge = 0; patN = 4;
+          patKind = isAbcd ? 1 : 8;
+          patBull = D < A;
+          a0px = A; a0t = At; a0i = Ai;
+          a1px = B; a1t = Bt; a1i = Bi;
+          a2px = C; a2t = Ct; a2i = Ci;
+          a3px = D; a3t = Dt; a3i = Di;
+          a4px = NaN; a4i = -1;
+        }
+      }
+    }
+  }
+
+  if (shHarm && pivN >= 5) {
+    // use most recent 5 pivots as X A B C D
+    let X = p1px; let A = p2px; let B = p3px; let C = p4px; let D = p5px;
+    let Xt = p1t; let At = p2t; let Bt = p3t; let Ct = p4t; let Dt = p5t;
+    let Xi = p1i; let Ai = p2i; let Bi = p3i; let Ci = p4i; let Di = p5i;
+    if (pivN >= 6) {
+      X = p0px; A = p1px; B = p2px; C = p3px; D = p4px;
+      Xt = p0t; At = p1t; Bt = p2t; Ct = p3t; Dt = p4t;
